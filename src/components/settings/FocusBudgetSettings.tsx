@@ -17,7 +17,7 @@ export function FocusBudgetSettings() {
   const { focusBudget, updateFocusBudgetSettings } = useSettingsStore();
   const feeds = useCalendarStore((s) => s.feeds);
 
-  const writableFeeds = feeds.filter((f) => f.type !== "GOOGLE" || f.enabled);
+  const selectableFeeds = feeds.filter((f) => f.enabled);
 
   return (
     <SettingsSection
@@ -49,12 +49,12 @@ export function FocusBudgetSettings() {
             <SelectValue placeholder="Select a calendar" />
           </SelectTrigger>
           <SelectContent>
-            {writableFeeds.length === 0 ? (
+            {selectableFeeds.length === 0 ? (
               <SelectItem value="__none" disabled>
                 No calendars available
               </SelectItem>
             ) : (
-              writableFeeds.map((feed) => (
+              selectableFeeds.map((feed) => (
                 <SelectItem key={feed.id} value={feed.id}>
                   {feed.name}
                 </SelectItem>
