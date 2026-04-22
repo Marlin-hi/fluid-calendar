@@ -33,6 +33,9 @@ interface SettingsStore extends Settings {
     settings: Partial<Settings["autoSchedule"]>
   ) => void;
   updateSystemSettings: (settings: Partial<Settings["system"]>) => void;
+  updateFocusBudgetSettings: (
+    settings: Partial<Settings["focusBudget"]>
+  ) => void;
   setAccounts: (accounts: ConnectedAccount[]) => void;
   removeAccount: (accountId: string) => Promise<void>;
   refreshAccounts: () => Promise<void>;
@@ -112,6 +115,12 @@ const defaultSettings: Settings & { accounts: ConnectedAccount[] } = {
     logRetention: undefined,
     logDestination: "db",
     disableHomepage: false,
+  },
+  focusBudget: {
+    enabled: false,
+    feedId: null,
+    targetHours: 30,
+    toleranceHours: 2,
   },
   accounts: [],
 };
@@ -316,6 +325,28 @@ export const useSettingsStore = create<SettingsStore>()(
 
           return { system: newSettings };
         }),
+      updateFocusBudgetSettings: (settings) =>
+        set((state) => {
+          const newSettings = { ...state.focusBudget, ...settings };
+
+          fetch("/api/user-settings", {
+            method: "PATCH",
+            headers: {
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify({ focusBudgetConfig: newSettings }),
+          }).catch((error) => {
+            logger.error(
+              "Failed to save focus budget settings to database",
+              {
+                error: error instanceof Error ? error.message : "Unknown error",
+              },
+              LOG_SOURCE
+            );
+          });
+
+          return { focusBudget: newSettings };
+        }),
       setAccounts: (accounts) =>
         set(() => ({
           accounts,
@@ -392,6 +423,19 @@ export const useSettingsStore = create<SettingsStore>()(
             weekStartDay: userSettings.weekStartDay,
             timeFormat: userSettings.timeFormat,
           });
+
+          // Hydrate focus budget from JSON column without write-back
+          if (
+            userSettings.focusBudgetConfig &&
+            typeof userSettings.focusBudgetConfig === "object"
+          ) {
+            const cfg = userSettings.focusBudgetConfig as Partial<
+              Settings["focusBudget"]
+            >;
+            set((state) => ({
+              focusBudget: { ...state.focusBudget, ...cfg },
+            }));
+          }
 
           // More updates will be added here
           get().updateCalendarSettings({

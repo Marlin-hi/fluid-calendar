@@ -12,6 +12,7 @@ import { cn } from "@/lib/utils";
 
 import { useShortcutsStore } from "@/store/shortcuts";
 
+import { FocusBudgetBadge } from "./FocusBudgetBadge";
 import { ThemeToggle } from "./ThemeToggle";
 import { UserMenu } from "./UserMenu";
 
@@ -87,6 +88,7 @@ export function AppNav({ className }: AppNavProps) {
             })}
           </div>
           <div className="flex items-center gap-1 md:gap-2">
+            <FocusBudgetBadge />
             <button
               onClick={openCommandPalette}
               className="flex items-center gap-1 rounded-md px-1.5 py-1.5 text-xs text-muted-foreground hover:bg-muted hover:text-foreground"

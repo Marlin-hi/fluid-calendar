@@ -58,6 +58,13 @@ export interface DataSettings {
   retainDataFor: number; // days
 }
 
+export interface FocusBudgetSettings {
+  enabled: boolean;
+  feedId: string | null;
+  targetHours: number;
+  toleranceHours: number;
+}
+
 export interface AutoScheduleSettings {
   workDays: string; // JSON string of numbers 0-6
   workHourStart: number; // 0-23
@@ -103,4 +110,5 @@ export interface Settings {
   data: DataSettings;
   autoSchedule: AutoScheduleSettings;
   system: SystemSettings;
+  focusBudget: FocusBudgetSettings;
 }

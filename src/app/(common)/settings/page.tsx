@@ -8,6 +8,7 @@ import dynamic from "next/dynamic";
 import { AccountManager } from "@/components/settings/AccountManager";
 import { AutoScheduleSettings } from "@/components/settings/AutoScheduleSettings";
 import { CalendarSettings } from "@/components/settings/CalendarSettings";
+import { FocusBudgetSettings } from "@/components/settings/FocusBudgetSettings";
 import { ImportExportSettings } from "@/components/settings/ImportExportSettings";
 import { LogViewer } from "@/components/settings/LogViewer";
 import { NotificationSettings } from "@/components/settings/NotificationSettings";
@@ -45,6 +46,7 @@ type SettingsTab =
   | "user"
   | "calendar"
   | "auto-schedule"
+  | "focus-budget"
   | "system"
   | "task-sync"
   | "logs"
@@ -70,6 +72,7 @@ export default function SettingsPage() {
       { id: "user", label: "User" },
       { id: "calendar", label: "Calendar" },
       { id: "auto-schedule", label: "Auto-Schedule" },
+      { id: "focus-budget", label: "Focus Budget" },
       { id: "task-sync", label: "Task Sync" },
       { id: "notifications", label: "Notifications" },
       { id: "import-export", label: "Import/Export" },
@@ -112,6 +115,7 @@ export default function SettingsPage() {
         "user",
         "calendar",
         "auto-schedule",
+        "focus-budget",
         "task-sync",
         "system",
         "logs",
@@ -187,6 +191,8 @@ export default function SettingsPage() {
         return <CalendarSettings />;
       case "auto-schedule":
         return <AutoScheduleSettings />;
+      case "focus-budget":
+        return <FocusBudgetSettings />;
       case "task-sync":
         return <TaskSyncSettings />;
       case "notifications":
