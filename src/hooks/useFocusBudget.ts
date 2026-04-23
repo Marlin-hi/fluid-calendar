@@ -50,7 +50,8 @@ function expandRecurringMinutes(
   if (durationMs <= 0) return 0;
 
   try {
-    const rule = RRule.fromString(event.recurrenceRule);
+    const options = RRule.parseString(event.recurrenceRule);
+    const rule = new RRule({ ...options, dtstart: start });
     const occurrences = rule.between(weekStart, weekEnd, true);
     let total = 0;
     for (const occ of occurrences) {
