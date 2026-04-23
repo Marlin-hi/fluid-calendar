@@ -92,7 +92,6 @@ export function WeekView({ currentDate, onDateClick }: WeekViewProps) {
   const [isTask, setIsTask] = useState(false);
   const eventModalStore = useEventModalStore();
   const [clickedElement, setClickedElement] = useState<HTMLElement | null>(null);
-  const [debugInfo, setDebugInfo] = useState<string>("");
 
   useEffect(() => {
     const log = (msg: string) => {
@@ -253,7 +252,6 @@ export function WeekView({ currentDate, onDateClick }: WeekViewProps) {
       document.querySelector<HTMLElement>(".fc-scroller-liquid-absolute") ||
       document.querySelector<HTMLElement>(".fc-scroller");
     const debugStr = `SELECT start=${selectInfo.start.toISOString()} end=${selectInfo.end.toISOString()} allDay=${selectInfo.allDay} scrollTop=${scroller?.scrollTop ?? "?"} innerH=${typeof window !== "undefined" ? window.innerHeight : "?"}`;
-    setDebugInfo(debugStr);
     if (typeof window !== "undefined") {
       fetch("/api/mobile-debug", { method: "POST", body: debugStr, keepalive: true }).catch(() => {});
     }
@@ -399,7 +397,6 @@ export function WeekView({ currentDate, onDateClick }: WeekViewProps) {
         height="100%"
         dateClick={(arg) => {
           const msg = `DATECLICK date=${arg.date.toISOString()} allDay=${arg.allDay}`;
-          setDebugInfo(msg);
           if (typeof window !== "undefined") {
             fetch("/api/mobile-debug", { method: "POST", body: msg, keepalive: true }).catch(() => {});
           }
