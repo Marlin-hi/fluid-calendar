@@ -172,9 +172,13 @@ export function DayView({ currentDate, onDateClick }: DayViewProps) {
         setIsTask(true);
       }
     } else {
-      const event = useCalendarStore
-        .getState()
-        .events.find((e) => e.id === itemId);
+      const storeEvents = useCalendarStore.getState().events;
+      const rawId = itemId.includes("_")
+        ? itemId.slice(0, itemId.indexOf("_"))
+        : itemId;
+      const event =
+        storeEvents.find((e) => e.id === itemId) ??
+        storeEvents.find((e) => e.id === rawId);
       setQuickViewItem(event as CalendarEvent);
       setIsTask(false);
     }
