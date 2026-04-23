@@ -124,7 +124,11 @@ interface CalendarStore extends CalendarState {
   refreshEvents: () => Promise<void>;
 
   // Get expanded events for a date range
-  getExpandedEvents: (start: Date, end: Date) => CalendarEvent[];
+  getExpandedEvents: (
+    start: Date,
+    end: Date,
+    expandInstances?: boolean
+  ) => CalendarEvent[];
 
   // New task-related methods
   getTasksAsEvents: (start: Date, end: Date) => CalendarEvent[];
@@ -956,8 +960,7 @@ export const useCalendarStore = create<CalendarStore>()((set, get) => ({
 
   // Get both events and tasks for the calendar
   getAllCalendarItems: (start: Date, end: Date) => {
-    // console.log("Getting all calendar items:", { start, end });
-    const events = get().getExpandedEvents(start, end);
+    const events = get().getExpandedEvents(start, end, true);
     const taskEvents = get().getTasksAsEvents(start, end);
     return [...events, ...taskEvents];
   },
