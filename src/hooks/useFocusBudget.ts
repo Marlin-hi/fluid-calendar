@@ -98,8 +98,9 @@ export function useFocusBudget(): FocusBudgetResult {
     for (const event of events) {
       if (event.feedId !== focusFeedId) continue;
       if (event.allDay) continue;
+      if (event.masterEventId) continue;
 
-      if (event.isMaster && event.isRecurring && event.recurrenceRule) {
+      if (event.isRecurring && event.recurrenceRule) {
         totalMinutes += expandRecurringMinutes(event, weekStart, weekEnd);
       } else {
         totalMinutes += minutesInWeek(event, weekStart, weekEnd);
