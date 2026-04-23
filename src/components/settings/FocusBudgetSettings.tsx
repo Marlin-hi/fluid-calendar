@@ -1,3 +1,5 @@
+import { useEffect } from "react";
+
 import {
   Select,
   SelectContent,
@@ -16,6 +18,13 @@ import { SettingRow, SettingsSection } from "./SettingsSection";
 export function FocusBudgetSettings() {
   const { focusBudget, updateFocusBudgetSettings } = useSettingsStore();
   const feeds = useCalendarStore((s) => s.feeds);
+  const loadFromDatabase = useCalendarStore((s) => s.loadFromDatabase);
+
+  useEffect(() => {
+    if (feeds.length === 0) {
+      loadFromDatabase();
+    }
+  }, [feeds.length, loadFromDatabase]);
 
   const selectableFeeds = feeds.filter((f) => f.enabled);
 
