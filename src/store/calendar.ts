@@ -486,6 +486,24 @@ export const useCalendarStore = create<CalendarStore>()((set, get) => ({
         return;
       }
 
+      // For LOCAL calendars, write directly to the DB via generic events API
+      if (feed.type === "LOCAL") {
+        const response = await fetch("/api/events", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(newEvent),
+        });
+
+        if (!response.ok) {
+          throw new Error("Failed to add event to local calendar");
+        }
+
+        await get().loadFromDatabase();
+        const { triggerScheduleAllTasks } = useTaskStore.getState();
+        await triggerScheduleAllTasks();
+        return;
+      }
+
       // For other calendars, throw an error
       throw new Error("Unsupported calendar type");
     } catch (error) {
@@ -558,6 +576,24 @@ export const useCalendarStore = create<CalendarStore>()((set, get) => ({
         // Reload from database to get the latest state
         await get().loadFromDatabase();
         // Trigger auto-scheduling after event is created
+        const { triggerScheduleAllTasks } = useTaskStore.getState();
+        await triggerScheduleAllTasks();
+        return;
+      }
+
+      // For LOCAL calendars, update directly in the DB via generic events API
+      if (feed.type === "LOCAL") {
+        const response = await fetch(`/api/events`, {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ id, ...updates }),
+        });
+
+        if (!response.ok) {
+          throw new Error("Failed to update event in local calendar");
+        }
+
+        await get().loadFromDatabase();
         const { triggerScheduleAllTasks } = useTaskStore.getState();
         await triggerScheduleAllTasks();
         return;
