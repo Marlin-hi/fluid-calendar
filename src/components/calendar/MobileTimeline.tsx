@@ -1,5 +1,21 @@
 "use client";
 
+/**
+ * MobileTimeline — the calendar grid we render on narrow viewports.
+ *
+ * This is NOT FullCalendar. Desktop (>=768px) uses FullCalendar via
+ * `WeekView.tsx`; on mobile we render a bespoke horizontally-scrollable
+ * timeline here. `Calendar.tsx` switches between the two based on viewport
+ * width. Keep that fork in mind when changing event styling or interaction —
+ * a change in one path does not reach the other.
+ *
+ * Geometry: each day is a flex column of `DAY_WIDTH_VW` vh-wide; the canvas
+ * renders `DAYS_BEFORE + 1 + DAYS_AFTER` days preloaded so horizontal
+ * swipe/scroll feels infinite. Times are positioned with `HOUR_HEIGHT` px
+ * per hour. Overlapping timed events are split into lanes by `assignLanes()`
+ * (see below) so they stay individually tappable.
+ */
+
 import { useCallback, useEffect, useRef, useMemo, useState } from "react";
 import { useCalendarStore } from "@/store/calendar";
 import { hexToGlass } from "@/lib/utils";
@@ -59,12 +75,88 @@ function isSameDay(a: Date, b: Date): boolean {
   );
 }
 
+/**
+ * Positioned event ready for render. Geometry is in two layers:
+ *  - vertical: top/height in pixels (time-to-y at HOUR_HEIGHT per hour)
+ *  - horizontal: leftPct/widthPct are percentages of the day column, computed
+ *    by `assignLanes()` below to split overlapping timed events into columns
+ *    ("lanes"). zIndex makes shorter events paint on top of longer ones when
+ *    fully contained.
+ */
 interface PositionedEvent {
   event: CalendarEvent;
   top: number;
   height: number;
   color: string;
   isAllDay: boolean;
+  leftPct: number;
+  widthPct: number;
+  zIndex: number;
+}
+
+/**
+ * Split overlapping timed events into lanes so all concurrent events stay
+ * visible (matches FullCalendar's behaviour on desktop). Algorithm:
+ *
+ *   1. Sort by start asc, then duration desc. Longer events at the same
+ *      start time claim the leftmost lane; shorter ones land further right.
+ *   2. Scan in order and greedily place each event into the lowest-indexed
+ *      lane whose previous event has already ended.
+ *   3. Within each overlap cluster, derive leftPct/widthPct from the cluster's
+ *      lane count. Events in different clusters render independently and each
+ *      take the full column width.
+ *   4. zIndex follows the lane index: events in higher (right-hand) lanes are
+ *      painted on top. With the chosen sort, shorter events that sit inside a
+ *      longer one end up on the right AND on top — the behaviour Marlin asked
+ *      for ("das Kürzere immer on top, on top und rechts davon").
+ *
+ * Mutates the input array in place (sets leftPct/widthPct/zIndex on each
+ * timed event). All-day events are skipped — they live in their own row above.
+ */
+function assignLanes(events: PositionedEvent[]): void {
+  const timed = events.filter((e) => !e.isAllDay);
+  if (timed.length === 0) return;
+
+  timed.sort((a, b) => {
+    if (a.top !== b.top) return a.top - b.top;
+    return b.height - a.height; // longer first at equal start
+  });
+
+  type WithLane = PositionedEvent & { _lane: number };
+  let cluster: WithLane[] = [];
+  let clusterMaxEnd = -Infinity;
+
+  const finalise = (group: WithLane[]) => {
+    if (group.length === 0) return;
+    const lanes = Math.max(...group.map((g) => g._lane)) + 1;
+    for (const e of group) {
+      e.leftPct = (e._lane / lanes) * 100;
+      e.widthPct = (1 / lanes) * 100;
+      e.zIndex = 10 + e._lane;
+    }
+  };
+
+  for (const raw of timed) {
+    const e = raw as WithLane;
+    const end = e.top + e.height;
+    // A new cluster starts once we hit an event that begins at or after the
+    // latest end we've seen so far — nothing in the previous cluster still
+    // conflicts with it.
+    if (e.top >= clusterMaxEnd) {
+      finalise(cluster);
+      cluster = [];
+      clusterMaxEnd = -Infinity;
+    }
+    // Greedy: lowest free lane within this cluster.
+    let lane = 0;
+    const laneEnds: number[] = [];
+    for (const other of cluster) laneEnds[other._lane] = Math.max(laneEnds[other._lane] ?? -Infinity, other.top + other.height);
+    while (laneEnds[lane] !== undefined && laneEnds[lane] > e.top) lane++;
+    e._lane = lane;
+    cluster.push(e);
+    clusterMaxEnd = Math.max(clusterMaxEnd, end);
+  }
+  finalise(cluster);
 }
 
 export function MobileTimeline({ currentDate, onDateChange }: MobileTimelineProps) {
@@ -182,7 +274,16 @@ export function MobileTimeline({ currentDate, onDateChange }: MobileTimelineProp
           const color = feed?.color || "#3b82f6";
 
           if (item.allDay) {
-            dayEvents.push({ event: item, top: 0, height: 24, color, isAllDay: true });
+            dayEvents.push({
+              event: item,
+              top: 0,
+              height: 24,
+              color,
+              isAllDay: true,
+              leftPct: 0,
+              widthPct: 100,
+              zIndex: 10,
+            });
           } else {
             const startHour = isSameDay(itemStart, day)
               ? itemStart.getHours() + itemStart.getMinutes() / 60
@@ -192,10 +293,22 @@ export function MobileTimeline({ currentDate, onDateChange }: MobileTimelineProp
               : 24;
             const top = startHour * HOUR_HEIGHT;
             const height = Math.max((endHour - startHour) * HOUR_HEIGHT, 20);
-            dayEvents.push({ event: item, top, height, color, isAllDay: false });
+            dayEvents.push({
+              event: item,
+              top,
+              height,
+              color,
+              isAllDay: false,
+              leftPct: 0,
+              widthPct: 100,
+              zIndex: 10,
+            });
           }
         }
       }
+      // Split overlapping timed events into side-by-side lanes. See
+      // assignLanes() above for the exact ordering / z-index behaviour.
+      assignLanes(dayEvents);
       map.set(key, dayEvents);
     }
     return map;
@@ -457,10 +570,16 @@ export function MobileTimeline({ currentDate, onDateChange }: MobileTimelineProp
                 {dayEvents.map((pe) => (
                   <div
                     key={pe.event.id}
-                    className="absolute left-0.5 right-0.5 overflow-hidden rounded-lg px-1 py-0.5 text-[10px] leading-tight text-white cursor-pointer"
+                    // left/width come from assignLanes(); the fixed 2px inset
+                    // on each side keeps events from touching the column
+                    // borders even when they span the full lane.
+                    className="absolute overflow-hidden rounded-lg px-1 py-0.5 text-[10px] leading-tight text-white cursor-pointer"
                     style={{
                       top: pe.top,
                       height: pe.height,
+                      left: `calc(${pe.leftPct}% + 2px)`,
+                      width: `calc(${pe.widthPct}% - 4px)`,
+                      zIndex: pe.zIndex,
                       backgroundColor: hexToGlass(pe.color, 0.55),
                       backdropFilter: "blur(8px)",
                     }}

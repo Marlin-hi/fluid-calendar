@@ -361,7 +361,11 @@ export function Calendar({
           </div>
         </header>
 
-        {/* Calendar Grid */}
+        {/* Calendar Grid.
+         * The weekly view forks by viewport: mobile (<768px) uses our own
+         * horizontally-scrollable MobileTimeline; desktop uses FullCalendar
+         * via WeekView. Styling and interaction drift between the two if you
+         * forget — touch both paths when changing weekly-view behaviour. */}
         <div ref={calendarGridRef} className="flex-1 overflow-hidden">
           {isMobile && view === "week" ? (
             <MobileTimeline
