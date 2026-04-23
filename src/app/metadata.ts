@@ -1,13 +1,28 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 
 export const metadata: Metadata = {
-  title: "FluidCalendar",
-  description: "A modern calendar and task management application",
+  title: "Kalender",
+  description: "Marlins Kalender",
+  manifest: "/manifest.json",
+  appleWebApp: {
+    capable: true,
+    statusBarStyle: "default",
+    title: "Kalender",
+  },
   icons: {
     icon: [
+      { url: "/icon-192.png", sizes: "192x192", type: "image/png" },
       { url: "/logo.svg", type: "image/svg+xml", sizes: "any" },
-      { url: "/logo.svg", type: "image/svg+xml", sizes: "64x64" },
     ],
-    apple: [{ url: "/logo.svg", type: "image/svg+xml", sizes: "180x180" }],
+    apple: [{ url: "/icon-192.png", sizes: "192x192", type: "image/png" }],
   },
+};
+
+export const viewport: Viewport = {
+  width: "device-width",
+  initialScale: 1,
+  maximumScale: 1,
+  userScalable: false,
+  viewportFit: "cover",
+  themeColor: "#0f172a",
 };

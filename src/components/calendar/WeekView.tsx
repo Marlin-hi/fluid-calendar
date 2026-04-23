@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import type {
   DatesSetArg,
@@ -58,10 +58,71 @@ export function WeekView({ currentDate, onDateClick }: WeekViewProps) {
   >([]);
   const calendarRef = useRef<FullCalendar>(null);
   const tasks = useTaskStore((state) => state.tasks);
+  const [isMobile, setIsMobile] = useState(false);
+
+  useEffect(() => {
+    const check = () => setIsMobile(window.innerWidth < 768);
+    check();
+    window.addEventListener("resize", check);
+    return () => window.removeEventListener("resize", check);
+  }, []);
+
+  // Switch between 3-day and 7-day view based on screen size
+  useEffect(() => {
+    if (calendarRef.current) {
+      const calendar = calendarRef.current.getApi();
+      const targetView = isMobile ? "timeGridThreeDay" : "timeGridWeek";
+      if (calendar.view.type !== targetView) {
+        calendar.changeView(targetView);
+      }
+    }
+  }, [isMobile]);
+
+  const customViews = useMemo(
+    () => ({
+      timeGridThreeDay: {
+        type: "timeGrid" as const,
+        duration: { days: 3 },
+      },
+    }),
+    []
+  );
+
   const [quickViewItem, setQuickViewItem] = useState<CalendarEvent | Task>();
   const [isTask, setIsTask] = useState(false);
   const eventModalStore = useEventModalStore();
   const [clickedElement, setClickedElement] = useState<HTMLElement | null>(null);
+  const [debugInfo, setDebugInfo] = useState<string>("");
+
+  useEffect(() => {
+    const log = (msg: string) => {
+      fetch("/api/mobile-debug", { method: "POST", body: msg, keepalive: true }).catch(() => {});
+    };
+    const onTouchStart = (e: TouchEvent) => {
+      const t = e.touches[0];
+      const el = document.elementFromPoint(t.clientX, t.clientY);
+      log(`TOUCHSTART x=${Math.round(t.clientX)} y=${Math.round(t.clientY)} target=${(el as HTMLElement)?.className?.substring?.(0, 80) || el?.nodeName}`);
+    };
+    const onTouchEnd = (e: TouchEvent) => {
+      log(`TOUCHEND changedTouches=${e.changedTouches.length}`);
+    };
+    document.addEventListener("touchstart", onTouchStart, true);
+    document.addEventListener("touchend", onTouchEnd, true);
+    return () => {
+      document.removeEventListener("touchstart", onTouchStart, true);
+      document.removeEventListener("touchend", onTouchEnd, true);
+    };
+  }, []);
+
+  useEffect(() => {
+    if (isEventModalOpen || eventModalStore.isOpen) {
+      fetch("/api/mobile-debug", {
+        method: "POST",
+        body: `MODAL_OPEN internal=${isEventModalOpen} store=${eventModalStore.isOpen} storeDefault=${eventModalStore.defaultDate?.toISOString?.()} selectedDate=${selectedDate?.toISOString?.()}`,
+        keepalive: true,
+      }).catch(() => {});
+    }
+  }, [isEventModalOpen, eventModalStore.isOpen, eventModalStore.defaultDate, selectedDate]);
 
   // Update events when the calendar view changes
   const handleDatesSet = useCallback(
@@ -176,13 +237,29 @@ export function WeekView({ currentDate, onDateClick }: WeekViewProps) {
 
   const handleDateSelect = (selectInfo: DateSelectArg) => {
     const start = selectInfo.start;
-    const end = selectInfo.allDay ? start : selectInfo.end;
+    let end = selectInfo.allDay ? start : selectInfo.end;
+    if (!selectInfo.allDay) {
+      const durationMs = end.getTime() - start.getTime();
+      if (durationMs < 60 * 60 * 1000) {
+        end = new Date(start.getTime() + 60 * 60 * 1000);
+      }
+    }
+
+    const scroller =
+      document.querySelector<HTMLElement>(".fc-scroller-liquid-absolute") ||
+      document.querySelector<HTMLElement>(".fc-scroller");
+    const debugStr = `SELECT start=${selectInfo.start.toISOString()} end=${selectInfo.end.toISOString()} allDay=${selectInfo.allDay} scrollTop=${scroller?.scrollTop ?? "?"} innerH=${typeof window !== "undefined" ? window.innerHeight : "?"}`;
+    setDebugInfo(debugStr);
+    if (typeof window !== "undefined") {
+      fetch("/api/mobile-debug", { method: "POST", body: debugStr, keepalive: true }).catch(() => {});
+    }
 
     setSelectedDate(start);
     setSelectedEndDate(end);
     setSelectedEvent({
       allDay: selectInfo.allDay,
-    });
+      title: debugStr,
+    } as Partial<CalendarEvent> as CalendarEvent);
     setIsEventModalOpen(true);
   };
 
@@ -267,11 +344,19 @@ export function WeekView({ currentDate, onDateClick }: WeekViewProps) {
   );
 
   return (
-    <div className="h-full [&_.fc-daygrid-day-events]:!min-h-0 [&_.fc-daygrid-day-frame]:!min-h-0 [&_.fc-timegrid-axis-cushion]:!py-1 [&_.fc-timegrid-slot-label]:!py-1 [&_.fc-timegrid-slot]:!h-[35px]">
+    <div className="relative h-full [&_.fc-daygrid-day-events]:!min-h-0 [&_.fc-daygrid-day-frame]:!min-h-0 [&_.fc-timegrid-axis-cushion]:!py-1 [&_.fc-timegrid-slot-label]:!py-1 [&_.fc-timegrid-slot]:!h-[35px]">
+      <div
+        onClick={() => setDebugInfo("")}
+        className="fixed left-1 right-1 bottom-1 z-[99999] rounded bg-red-900 px-2 py-1 text-[10px] text-yellow-200 font-mono"
+        style={{ pointerEvents: "auto" }}
+      >
+        v6 {debugInfo || "noch nichts getippt"}
+      </div>
       <FullCalendar
         ref={calendarRef}
         plugins={[timeGridPlugin, interactionPlugin]}
-        initialView="timeGridWeek"
+        initialView={isMobile ? "timeGridThreeDay" : "timeGridWeek"}
+        views={customViews}
         headerToolbar={false}
         initialDate={currentDate}
         events={events}
@@ -284,6 +369,8 @@ export function WeekView({ currentDate, onDateClick }: WeekViewProps) {
         slotEventOverlap={true}
         stickyHeaderDates={true}
         slotDuration="00:30:00"
+        snapDuration="00:15:00"
+        selectLongPressDelay={400}
         timeZone="local"
         displayEventEnd={true}
         eventTimeFormat={{
@@ -313,7 +400,14 @@ export function WeekView({ currentDate, onDateClick }: WeekViewProps) {
           omitCommas: true,
         }}
         height="100%"
-        dateClick={(arg) => onDateClick?.(arg.date)}
+        dateClick={(arg) => {
+          const msg = `DATECLICK date=${arg.date.toISOString()} allDay=${arg.allDay}`;
+          setDebugInfo(msg);
+          if (typeof window !== "undefined") {
+            fetch("/api/mobile-debug", { method: "POST", body: msg, keepalive: true }).catch(() => {});
+          }
+          onDateClick?.(arg.date);
+        }}
         eventClick={handleEventClick}
         select={handleDateSelect}
         selectable={true}

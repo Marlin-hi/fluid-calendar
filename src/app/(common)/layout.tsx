@@ -20,6 +20,9 @@ import { usePageTitle } from "@/hooks/use-page-title";
 import { useShortcutsStore } from "@/store/shortcuts";
 
 import "../globals.css";
+import "@/styles/time-theme.css";
+
+import { TimeThemeProvider } from "@/components/TimeThemeProvider";
 
 // Dynamically import the NotificationProvider based on SAAS flag
 const NotificationProvider = dynamic<{ children: React.ReactNode }>(
@@ -65,7 +68,8 @@ export default function RootLayout({
   }, [setShortcutsOpen]);
 
   return (
-    <div className="flex min-h-screen flex-col">
+    <TimeThemeProvider>
+    <div className="flex min-h-screen flex-col overflow-x-hidden">
       <SessionProvider>
         <PrivacyProvider>
           <DndProvider>
@@ -89,5 +93,6 @@ export default function RootLayout({
         </PrivacyProvider>
       </SessionProvider>
     </div>
+    </TimeThemeProvider>
   );
 }

@@ -10,7 +10,6 @@ import {
 } from "react-icons/hi";
 
 import { Button } from "@/components/ui/button";
-import { Checkbox } from "@/components/ui/checkbox";
 import {
   Select,
   SelectContent,
@@ -21,8 +20,6 @@ import {
 import { format, isFutureDate, newDate } from "@/lib/date-utils";
 import { cn } from "@/lib/utils";
 
-import { useTaskStore } from "@/store/task";
-
 import { Task, TaskStatus } from "@/types/task";
 
 import { useDraggableTask } from "../../dnd/useDragAndDrop";
@@ -31,7 +28,6 @@ import { EditableCell } from "./EditableCell";
 
 interface TaskRowProps {
   task: Task;
-  orderedIds: string[];
   onEdit: (task: Task) => void;
   onDelete: (taskId: string) => void;
   onStatusChange: (taskId: string, status: TaskStatus) => void;
@@ -40,7 +36,6 @@ interface TaskRowProps {
 
 export function TaskRow({
   task,
-  orderedIds,
   onEdit,
   onDelete,
   onStatusChange,
@@ -48,18 +43,6 @@ export function TaskRow({
 }: TaskRowProps) {
   const { draggableProps, isDragging } = useDraggableTask(task);
   const isFutureTask = task.startDate && isFutureDate(task.startDate);
-  const isSelected = useTaskStore((s) => s.selectedTaskIds.has(task.id));
-  const toggleSelection = useTaskStore((s) => s.toggleSelection);
-  const selectRange = useTaskStore((s) => s.selectRange);
-
-  const handleCheckboxClick = (e: React.MouseEvent) => {
-    e.stopPropagation();
-    if (e.shiftKey) {
-      selectRange(task.id, orderedIds);
-    } else {
-      toggleSelection(task.id);
-    }
-  };
 
   return (
     <tr
@@ -67,18 +50,9 @@ export function TaskRow({
       className={cn(
         "transition-colors hover:bg-muted/50",
         isDragging ? "opacity-50" : "",
-        isFutureTask ? "bg-muted/25 text-muted-foreground" : "",
-        isSelected ? "bg-primary/10 hover:bg-primary/15" : ""
+        isFutureTask ? "bg-muted/25 text-muted-foreground" : ""
       )}
     >
-      <td className="px-3 py-2">
-        <div onClick={handleCheckboxClick} className="flex items-center">
-          <Checkbox
-            checked={isSelected}
-            aria-label={`Select task ${task.title}`}
-          />
-        </div>
-      </td>
       <td className="px-3 py-2">
         <div
           className="cursor-grab text-muted-foreground hover:text-foreground"

@@ -1,0 +1,308 @@
+/* Time-based theme overrides for FluidCalendar */
+
+/* Override HSL CSS variables so dark mode doesn't paint black */
+[data-time-theme] {
+  --background: 0 0% 0% / 0;
+  --card: 0 0% 0% / 0;
+  --popover: 0 0% 0% / 0;
+  --muted: 0 0% 50% / 0.08;
+  --fc-page-bg-color: transparent;
+  --fc-neutral-bg-color: transparent;
+  --fc-non-business-color: rgba(0,0,0,0.06);
+}
+
+/* Make default backgrounds transparent so the photo shows through */
+[data-time-theme] body,
+[data-time-theme] .bg-background {
+  background: transparent !important;
+}
+
+/* Catch any remaining dark backgrounds */
+[data-time-theme] .dark .bg-background,
+[data-time-theme] [data-theme="dark"] .bg-background,
+[data-time-theme] .bg-card,
+[data-time-theme] .bg-popover,
+[data-time-theme] .bg-muted {
+  background: transparent !important;
+}
+
+/* Navbar */
+[data-time-theme] nav {
+  background: var(--tt-nav-bg) !important;
+  border-color: var(--tt-surface-border) !important;
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+}
+[data-time-theme] nav a,
+[data-time-theme] nav button,
+[data-time-theme] nav span {
+  color: var(--tt-nav-text) !important;
+}
+[data-time-theme] nav a[class*="bg-primary"] {
+  background: var(--tt-nav-active) !important;
+  color: var(--tt-nav-active-text) !important;
+}
+
+/* Calendar header bar */
+[data-time-theme] main > main > header,
+[data-time-theme] main header {
+  background: var(--tt-nav-bg) !important;
+  border-color: var(--tt-surface-border) !important;
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+}
+[data-time-theme] main header button,
+[data-time-theme] main header h1,
+[data-time-theme] main header span {
+  color: var(--tt-header-text) !important;
+}
+[data-time-theme] main header button[class*="bg-primary"] {
+  background: var(--tt-view-btn) !important;
+  color: var(--tt-view-btn-text) !important;
+}
+
+/* Sidebar */
+[data-time-theme] aside {
+  background: var(--tt-sidebar-bg) !important;
+  border-color: var(--tt-surface-border) !important;
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+}
+[data-time-theme] aside h2,
+[data-time-theme] aside h3,
+[data-time-theme] aside span,
+[data-time-theme] aside label,
+[data-time-theme] aside button {
+  color: var(--tt-calendar-text) !important;
+}
+
+/* FullCalendar grid */
+[data-time-theme] .fc {
+  background: var(--tt-grid-bg) !important;
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+}
+[data-time-theme] .fc-theme-standard td,
+[data-time-theme] .fc-theme-standard th,
+[data-time-theme] .fc-theme-standard .fc-scrollgrid {
+  border-color: var(--tt-grid-border) !important;
+}
+[data-time-theme] .fc-col-header-cell {
+  background: transparent !important;
+}
+[data-time-theme] .fc-col-header-cell-cushion,
+[data-time-theme] .fc-daygrid-day-number {
+  color: var(--tt-grid-header) !important;
+}
+[data-time-theme] .fc-timegrid-slot-label-cushion,
+[data-time-theme] .fc-timegrid-axis-cushion {
+  color: var(--tt-time-text) !important;
+}
+
+/* Today column highlight */
+[data-time-theme] .fc-day-today {
+  background: var(--tt-today-bg) !important;
+}
+
+/* Time grid lines */
+[data-time-theme] .fc-timegrid-slot {
+  border-color: var(--tt-grid-border) !important;
+}
+
+/* Non-business hours */
+[data-time-theme] .fc-non-business {
+  background: rgba(0,0,0,0.05) !important;
+}
+
+/* Now indicator */
+[data-time-theme] .fc-timegrid-now-indicator-line {
+  border-color: var(--tt-event-primary-border) !important;
+}
+[data-time-theme] .fc-timegrid-now-indicator-arrow {
+  border-color: var(--tt-event-primary-border) !important;
+  color: var(--tt-event-primary-border) !important;
+}
+
+/* All-day section */
+[data-time-theme] .fc-daygrid-body {
+  background: transparent !important;
+}
+
+/* Scrollbar styling */
+[data-time-theme] .fc-scroller::-webkit-scrollbar {
+  width: 6px;
+}
+[data-time-theme] .fc-scroller::-webkit-scrollbar-track {
+  background: transparent;
+}
+[data-time-theme] .fc-scroller::-webkit-scrollbar-thumb {
+  background: var(--tt-grid-border);
+  border-radius: 3px;
+}
+
+/* Settings and other pages - give them a surface background */
+[data-time-theme] .bg-white,
+[data-time-theme] .bg-card {
+  background: var(--tt-surface) !important;
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+}
+[data-time-theme] .border-gray-200,
+[data-time-theme] .border-border {
+  border-color: var(--tt-surface-border) !important;
+}
+[data-time-theme] .text-foreground {
+  color: var(--tt-header-text) !important;
+}
+[data-time-theme] .text-muted-foreground {
+  color: var(--tt-time-text) !important;
+}
+
+/* Mobile backdrop overlay */
+[data-time-theme] .bg-black\/40 {
+  background: rgba(0,0,0,0.5) !important;
+}
+
+/* Mini calendar in sidebar */
+[data-time-theme] aside button[class*="rounded-full"] {
+  color: var(--tt-calendar-text) !important;
+}
+[data-time-theme] aside button[class*="bg-primary"] {
+  background: var(--tt-nav-active) !important;
+  color: var(--tt-nav-active-text) !important;
+}
+
+/* === Frosted Glass Surfaces === */
+
+/* Event Quick View / Popovers */
+[data-time-theme] [role="dialog"],
+[data-time-theme] [data-radix-popper-content-wrapper] > *,
+[data-time-theme] .rounded-lg.border.shadow-lg,
+[data-time-theme] div[class*="shadow-lg"][class*="rounded"],
+[data-time-theme] div[class*="border"][class*="shadow-md"] {
+  background: var(--tt-sidebar-bg) !important;
+  backdrop-filter: blur(24px) saturate(1.4) !important;
+  -webkit-backdrop-filter: blur(24px) saturate(1.4) !important;
+  border-color: var(--tt-surface-border) !important;
+  color: var(--tt-calendar-text) !important;
+}
+
+/* Popover text elements */
+[data-time-theme] [role="dialog"] h1,
+[data-time-theme] [role="dialog"] h2,
+[data-time-theme] [role="dialog"] h3,
+[data-time-theme] [role="dialog"] p,
+[data-time-theme] [role="dialog"] span,
+[data-time-theme] [role="dialog"] div {
+  color: var(--tt-calendar-text) !important;
+}
+[data-time-theme] [role="dialog"] h1,
+[data-time-theme] [role="dialog"] h2,
+[data-time-theme] [role="dialog"] h3 {
+  color: var(--tt-grid-header) !important;
+}
+
+/* Modals and dropdowns */
+[data-time-theme] [role="listbox"],
+[data-time-theme] [role="menu"],
+[data-time-theme] [data-radix-menu-content],
+[data-time-theme] [cmdk-root] {
+  background: var(--tt-sidebar-bg) !important;
+  backdrop-filter: blur(24px) saturate(1.4) !important;
+  -webkit-backdrop-filter: blur(24px) saturate(1.4) !important;
+  border-color: var(--tt-surface-border) !important;
+}
+[data-time-theme] [role="listbox"] *,
+[data-time-theme] [role="menu"] *,
+[data-time-theme] [cmdk-root] * {
+  color: var(--tt-calendar-text) !important;
+}
+[data-time-theme] [role="option"][data-highlighted],
+[data-time-theme] [role="option"]:hover,
+[data-time-theme] [cmdk-item][data-selected] {
+  background: var(--tt-nav-active) !important;
+  color: var(--tt-nav-active-text) !important;
+}
+
+/* Toast / Sonner notifications */
+[data-time-theme] [data-sonner-toaster] [data-sonner-toast] {
+  background: var(--tt-sidebar-bg) !important;
+  backdrop-filter: blur(20px) !important;
+  -webkit-backdrop-filter: blur(20px) !important;
+  border-color: var(--tt-surface-border) !important;
+  color: var(--tt-calendar-text) !important;
+}
+
+/* Input fields inside modals */
+[data-time-theme] input,
+[data-time-theme] textarea,
+[data-time-theme] select {
+  background: rgba(0,0,0,0.15) !important;
+  border-color: var(--tt-surface-border) !important;
+  color: var(--tt-calendar-text) !important;
+}
+[data-time-theme] input::placeholder,
+[data-time-theme] textarea::placeholder {
+  color: var(--tt-time-text) !important;
+}
+
+/* Buttons in modals/popovers */
+[data-time-theme] [role="dialog"] button {
+  color: var(--tt-calendar-text) !important;
+}
+[data-time-theme] [role="dialog"] button:hover {
+  background: var(--tt-nav-active) !important;
+}
+[data-time-theme] [role="dialog"] button[class*="bg-primary"] {
+  background: var(--tt-view-btn) !important;
+  color: var(--tt-view-btn-text) !important;
+}
+
+/* Event cards - make them slightly more opaque for readability */
+[data-time-theme] .fc-event {
+  backdrop-filter: blur(4px) !important;
+  -webkit-backdrop-filter: blur(4px) !important;
+}
+
+/* Settings page cards */
+[data-time-theme] .bg-white {
+  background: var(--tt-surface) !important;
+  backdrop-filter: blur(20px) saturate(1.3) !important;
+  -webkit-backdrop-filter: blur(20px) saturate(1.3) !important;
+}
+
+/* Alert banners (Missing Google/Outlook credentials) */
+[data-time-theme] [role="alert"] {
+  background: rgba(0,0,0,0.15) !important;
+  backdrop-filter: blur(12px) !important;
+  -webkit-backdrop-filter: blur(12px) !important;
+  border-color: var(--tt-surface-border) !important;
+}
+
+/* Checkbox styling */
+[data-time-theme] button[role="checkbox"] {
+  border-color: var(--tt-surface-border) !important;
+}
+[data-time-theme] button[role="checkbox"][data-state="checked"] {
+  background: var(--tt-nav-active) !important;
+  border-color: var(--tt-nav-active-text) !important;
+}
+
+/* Settings page cards need a visible background for readability */
+[data-time-theme] .bg-card {
+  background: rgba(0, 0, 0, 0.45) !important;
+  backdrop-filter: blur(16px) saturate(1.4) !important;
+  -webkit-backdrop-filter: blur(16px) saturate(1.4) !important;
+}
+
+[data-time-theme] [class*="rounded-lg"][class*="border"][class*="bg-card"] {
+  border-color: rgba(255, 255, 255, 0.12) !important;
+}
+
+/* Settings text should always be readable on dark card */
+[data-time-theme] .bg-card *:not(button):not([class*="bg-primary"]) {
+  color: rgba(255, 255, 255, 0.95);
+}
+[data-time-theme] .bg-card .text-muted-foreground {
+  color: rgba(255, 255, 255, 0.65) !important;
+}

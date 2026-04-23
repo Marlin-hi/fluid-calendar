@@ -9,7 +9,6 @@ import {
   Tag,
   Task,
   TaskFilters,
-  TaskStatus,
   UpdateTask,
 } from "@/types/task";
 
@@ -20,22 +19,12 @@ interface TaskState {
   loading: boolean;
   error: Error | null;
 
-  // Selection state (ephemeral, not persisted)
-  selectedTaskIds: Set<string>;
-  lastSelectedTaskId: string | null;
-
   // Task actions
   fetchTasks: () => Promise<void>;
   createTask: (task: NewTask) => Promise<Task>;
   updateTask: (id: string, updates: UpdateTask) => Promise<Task>;
   deleteTask: (id: string) => Promise<void>;
   setFilters: (filters: Partial<TaskFilters>) => void;
-
-  // Selection actions
-  toggleSelection: (taskId: string) => void;
-  selectRange: (taskId: string, orderedIds: string[]) => void;
-  selectAll: (taskIds: string[]) => void;
-  clearSelection: () => void;
 
   // Tag actions
   fetchTags: () => Promise<void>;
@@ -49,8 +38,6 @@ interface TaskState {
     taskIds: string[],
     projectId: string | null
   ) => Promise<void>;
-  bulkDelete: (taskIds: string[]) => Promise<void>;
-  bulkSetStatus: (taskIds: string[], status: TaskStatus) => Promise<void>;
 
   // Auto-scheduling actions
   scheduleAllTasks: () => Promise<void>;
@@ -65,49 +52,6 @@ export const useTaskStore = create<TaskState>()(
       filters: {},
       loading: false,
       error: null,
-      selectedTaskIds: new Set<string>(),
-      lastSelectedTaskId: null,
-
-      toggleSelection: (taskId: string) => {
-        set((state) => {
-          const next = new Set(state.selectedTaskIds);
-          if (next.has(taskId)) {
-            next.delete(taskId);
-          } else {
-            next.add(taskId);
-          }
-          return { selectedTaskIds: next, lastSelectedTaskId: taskId };
-        });
-      },
-
-      selectRange: (taskId: string, orderedIds: string[]) => {
-        const { lastSelectedTaskId, selectedTaskIds } = get();
-        if (!lastSelectedTaskId || !orderedIds.includes(lastSelectedTaskId)) {
-          get().toggleSelection(taskId);
-          return;
-        }
-        const startIdx = orderedIds.indexOf(lastSelectedTaskId);
-        const endIdx = orderedIds.indexOf(taskId);
-        if (startIdx === -1 || endIdx === -1) {
-          get().toggleSelection(taskId);
-          return;
-        }
-        const [lo, hi] =
-          startIdx < endIdx ? [startIdx, endIdx] : [endIdx, startIdx];
-        const next = new Set(selectedTaskIds);
-        for (let i = lo; i <= hi; i++) {
-          next.add(orderedIds[i]);
-        }
-        set({ selectedTaskIds: next, lastSelectedTaskId: taskId });
-      },
-
-      selectAll: (taskIds: string[]) => {
-        set({ selectedTaskIds: new Set(taskIds) });
-      },
-
-      clearSelection: () => {
-        set({ selectedTaskIds: new Set<string>(), lastSelectedTaskId: null });
-      },
 
       // Task actions
       fetchTasks: async () => {
@@ -208,14 +152,9 @@ export const useTaskStore = create<TaskState>()(
             method: "DELETE",
           });
           if (!response.ok) throw new Error("Failed to delete task");
-          set((state) => {
-            const nextSelected = new Set(state.selectedTaskIds);
-            nextSelected.delete(id);
-            return {
-              tasks: state.tasks.filter((task) => task.id !== id),
-              selectedTaskIds: nextSelected,
-            };
-          });
+          set((state) => ({
+            tasks: state.tasks.filter((task) => task.id !== id),
+          }));
           await get().triggerScheduleAllTasks();
         } catch (error) {
           set({ error: error as Error });
@@ -345,50 +284,6 @@ export const useTaskStore = create<TaskState>()(
             )
           );
           await get().fetchTasks(); // Refresh task list
-          await get().triggerScheduleAllTasks();
-        } catch (error) {
-          set({ error: error as Error });
-          throw error;
-        } finally {
-          set({ loading: false });
-        }
-      },
-
-      bulkDelete: async (taskIds: string[]) => {
-        set({ loading: true, error: null });
-        try {
-          await Promise.all(
-            taskIds.map((taskId) =>
-              fetch(`/api/tasks/${taskId}`, { method: "DELETE" })
-            )
-          );
-          set((state) => ({
-            tasks: state.tasks.filter((t) => !taskIds.includes(t.id)),
-            selectedTaskIds: new Set<string>(),
-            lastSelectedTaskId: null,
-          }));
-          await get().triggerScheduleAllTasks();
-        } catch (error) {
-          set({ error: error as Error });
-          throw error;
-        } finally {
-          set({ loading: false });
-        }
-      },
-
-      bulkSetStatus: async (taskIds: string[], status: TaskStatus) => {
-        set({ loading: true, error: null });
-        try {
-          await Promise.all(
-            taskIds.map((taskId) =>
-              fetch(`/api/tasks/${taskId}`, {
-                method: "PUT",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ status }),
-              })
-            )
-          );
-          await get().fetchTasks();
           await get().triggerScheduleAllTasks();
         } catch (error) {
           set({ error: error as Error });

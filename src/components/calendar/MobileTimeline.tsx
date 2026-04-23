@@ -1,0 +1,509 @@
+"use client";
+
+import { useCallback, useEffect, useRef, useMemo, useState } from "react";
+import { useCalendarStore } from "@/store/calendar";
+import { hexToGlass } from "@/lib/utils";
+import { CalendarEvent } from "@/types/calendar";
+import { EventModal } from "./EventModal";
+import { EventQuickView } from "./EventQuickView";
+
+interface MobileTimelineProps {
+  currentDate: Date;
+  onDateChange?: (date: Date) => void;
+}
+
+const HOUR_HEIGHT = 48;
+const DAY_WIDTH_VW = 33;
+const DAYS_BEFORE = 30; // 1 month before
+const DAYS_AFTER = 60; // 2 months after
+const TOTAL_DAYS = DAYS_BEFORE + 1 + DAYS_AFTER; // 91
+const VISIBLE_HOURS = 32; // 00:00 to 08:00 next day
+const HOURS = Array.from({ length: VISIBLE_HOURS }, (_, i) => i);
+
+function getDayStart(date: Date): Date {
+  const d = new Date(date);
+  d.setHours(0, 0, 0, 0);
+  return d;
+}
+
+function addDaysUtil(date: Date, days: number): Date {
+  const d = new Date(date);
+  d.setDate(d.getDate() + days);
+  return d;
+}
+
+function formatDayHeader(date: Date): string {
+  const days = ["So", "Mo", "Di", "Mi", "Do", "Fr", "Sa"];
+  return `${days[date.getDay()]} ${date.getDate()}.${date.getMonth() + 1}`;
+}
+
+function formatHour(hour: number): string {
+  const h = hour % 24;
+  return `${h.toString().padStart(2, "0")}:00`;
+}
+
+function isToday(date: Date): boolean {
+  const now = new Date();
+  return (
+    date.getDate() === now.getDate() &&
+    date.getMonth() === now.getMonth() &&
+    date.getFullYear() === now.getFullYear()
+  );
+}
+
+function isSameDay(a: Date, b: Date): boolean {
+  return (
+    a.getDate() === b.getDate() &&
+    a.getMonth() === b.getMonth() &&
+    a.getFullYear() === b.getFullYear()
+  );
+}
+
+interface PositionedEvent {
+  event: CalendarEvent;
+  top: number;
+  height: number;
+  color: string;
+  isAllDay: boolean;
+}
+
+export function MobileTimeline({ currentDate, onDateChange }: MobileTimelineProps) {
+  const { feeds, getAllCalendarItems } = useCalendarStore();
+  const scrollContainerRef = useRef<HTMLDivElement>(null);
+  const headerRef = useRef<HTMLDivElement>(null);
+  const allDayRef = useRef<HTMLDivElement>(null);
+  const lastScrollLeft = useRef(0);
+  const rafId = useRef(0);
+  const mountedRef = useRef(false);
+
+  // Event creation
+  const [isEventModalOpen, setIsEventModalOpen] = useState(false);
+  const [selectedDate, setSelectedDate] = useState<Date>();
+  const [selectedEndDate, setSelectedEndDate] = useState<Date>();
+  const [selectedEvent, setSelectedEvent] = useState<Partial<CalendarEvent>>();
+  const [quickViewItem, setQuickViewItem] = useState<CalendarEvent>();
+  const [clickedElement, setClickedElement] = useState<HTMLElement | null>(null);
+
+  const handleEventClick = useCallback((event: CalendarEvent, el: HTMLElement) => {
+    setClickedElement(el);
+    setQuickViewItem(event);
+  }, []);
+
+  const handleQuickViewClose = useCallback(() => {
+    setQuickViewItem(undefined);
+    setClickedElement(null);
+  }, []);
+
+  const handleQuickViewEdit = useCallback(() => {
+    if (!quickViewItem) return;
+    setSelectedEvent(quickViewItem);
+    setSelectedDate(new Date(quickViewItem.start));
+    setSelectedEndDate(new Date(quickViewItem.end));
+    setQuickViewItem(undefined);
+    setIsEventModalOpen(true);
+  }, [quickViewItem]);
+
+  const handleQuickViewDelete = useCallback(async () => {
+    if (!quickViewItem) return;
+    const store = useCalendarStore.getState();
+    await store.removeEvent(
+      quickViewItem.id,
+      quickViewItem.isRecurring ? "series" : "single"
+    );
+    setQuickViewItem(undefined);
+  }, [quickViewItem]);
+
+  const handleDayClick = useCallback((day: Date, hour: number) => {
+    const start = new Date(day);
+    start.setHours(Math.floor(hour), (hour % 1) * 60, 0, 0);
+    const end = new Date(start);
+    end.setHours(start.getHours() + 1);
+    setSelectedDate(start);
+    setSelectedEndDate(end);
+    setSelectedEvent({ allDay: false });
+    setIsEventModalOpen(true);
+  }, []);
+
+  const handleEventModalClose = useCallback(() => {
+    setIsEventModalOpen(false);
+    setSelectedEvent(undefined);
+    setSelectedDate(undefined);
+    setSelectedEndDate(undefined);
+  }, []);
+
+  // Center date for the canvas, reset on date picker jumps
+  const [canvasCenter, setCanvasCenter] = useState(() => getDayStart(currentDate));
+  const lastExternalDate = useRef(getDayStart(currentDate));
+
+  // Detect date picker jumps (>3 day difference = jump, not scroll)
+  useEffect(() => {
+    const newDate = getDayStart(currentDate);
+    const diff = Math.abs(newDate.getTime() - lastExternalDate.current.getTime());
+    const diffDays = diff / (24 * 60 * 60 * 1000);
+    lastExternalDate.current = newDate;
+
+    if (diffDays > 3 && mountedRef.current) {
+      // Date picker jump: reload canvas centered on new date
+      setCanvasCenter(newDate);
+      mountedRef.current = false; // trigger scroll-to on next render
+    }
+  }, [currentDate]);
+
+  const days = useMemo(() => {
+    const result: Date[] = [];
+    for (let i = -DAYS_BEFORE; i <= DAYS_AFTER; i++) {
+      result.push(addDaysUtil(canvasCenter, i));
+    }
+    return result;
+  }, [canvasCenter]);
+
+  const rangeStart = days[0];
+  const rangeEnd = addDaysUtil(days[days.length - 1], 1);
+  const allItems = useMemo(
+    () => getAllCalendarItems(rangeStart, rangeEnd),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [getAllCalendarItems, rangeStart.getTime(), rangeEnd.getTime()]
+  );
+
+  const eventsByDay = useMemo(() => {
+    const map = new Map<string, PositionedEvent[]>();
+
+    for (const day of days) {
+      const key = day.toISOString().slice(0, 10);
+      const dayEvents: PositionedEvent[] = [];
+      const dayEnd = addDaysUtil(day, 1);
+
+      for (const item of allItems) {
+        const itemStart = new Date(item.start);
+        const itemEnd = new Date(item.end);
+
+        if (itemStart < dayEnd && itemEnd > day) {
+          const feed = feeds.find((f) => f.id === item.feedId);
+          const color = feed?.color || "#3b82f6";
+
+          if (item.allDay) {
+            dayEvents.push({ event: item, top: 0, height: 24, color, isAllDay: true });
+          } else {
+            const startHour = isSameDay(itemStart, day)
+              ? itemStart.getHours() + itemStart.getMinutes() / 60
+              : 0;
+            const endHour = isSameDay(itemEnd, day)
+              ? itemEnd.getHours() + itemEnd.getMinutes() / 60
+              : 24;
+            const top = startHour * HOUR_HEIGHT;
+            const height = Math.max((endHour - startHour) * HOUR_HEIGHT, 20);
+            dayEvents.push({ event: item, top, height, color, isAllDay: false });
+          }
+        }
+      }
+      map.set(key, dayEvents);
+    }
+    return map;
+  }, [days, allItems, feeds]);
+
+  // Compute spanning all-day bars
+  interface AllDayBar {
+    event: CalendarEvent;
+    startIndex: number; // index in days[]
+    endIndex: number; // exclusive
+    row: number;
+    color: string;
+  }
+
+  const allDayBars = useMemo(() => {
+    const seen = new Set<string>();
+    const bars: AllDayBar[] = [];
+
+    for (const item of allItems) {
+      if (!item.allDay || seen.has(item.id)) continue;
+      seen.add(item.id);
+
+      const itemStart = getDayStart(new Date(item.start));
+      const itemEnd = new Date(item.end);
+      const feed = feeds.find((f) => f.id === item.feedId);
+      const color = feed?.color || "#3b82f6";
+
+      // Find start/end index in days array
+      let startIdx = -1;
+      let endIdx = -1;
+      for (let i = 0; i < days.length; i++) {
+        const dayEnd = addDaysUtil(days[i], 1);
+        if (startIdx === -1 && itemEnd > days[i] && itemStart < dayEnd) {
+          startIdx = i;
+        }
+        if (itemEnd > days[i] && itemStart < dayEnd) {
+          endIdx = i + 1;
+        }
+      }
+
+      if (startIdx >= 0 && endIdx > startIdx) {
+        bars.push({ event: item, startIndex: startIdx, endIndex: endIdx, row: 0, color });
+      }
+    }
+
+    // Assign rows (stack overlapping bars)
+    bars.sort((a, b) => a.startIndex - b.startIndex || (b.endIndex - b.startIndex) - (a.endIndex - a.startIndex));
+    for (const bar of bars) {
+      let row = 0;
+      while (bars.some((other) => other !== bar && other.row === row &&
+        other.startIndex < bar.endIndex && other.endIndex > bar.startIndex)) {
+        row++;
+      }
+      bar.row = row;
+    }
+
+    return bars;
+  }, [allItems, days, feeds]);
+
+  const maxAllDayRows = useMemo(() => {
+    let max = 0;
+    for (const bar of allDayBars) {
+      max = Math.max(max, bar.row + 1);
+    }
+    return max;
+  }, [allDayBars]);
+
+  const allDayHeight = maxAllDayRows > 0 ? maxAllDayRows * 26 + 4 : 0;
+
+  function scrollToDate(target: Date, smooth: boolean = false) {
+    const container = scrollContainerRef.current;
+    if (!container) return;
+
+    const dayWidth = container.clientWidth * (DAY_WIDTH_VW / 100);
+    const diffMs = target.getTime() - canvasCenter.getTime();
+    const diffDays = Math.round(diffMs / (24 * 60 * 60 * 1000));
+    const dayIndex = DAYS_BEFORE + diffDays;
+
+    if (dayIndex >= 0 && dayIndex < TOTAL_DAYS) {
+      container.scrollTo({
+        left: dayIndex * dayWidth,
+        behavior: smooth ? "smooth" : ("instant" as ScrollBehavior),
+      });
+      lastScrollLeft.current = container.scrollLeft;
+    }
+  }
+
+  // Scroll to center date on mount or canvas reload
+  useEffect(() => {
+    if (mountedRef.current) return;
+
+    // Small delay to ensure DOM is ready
+    requestAnimationFrame(() => {
+      mountedRef.current = true;
+      scrollToDate(canvasCenter, false);
+
+      const container = scrollContainerRef.current;
+      if (container) {
+        const now = new Date();
+        const targetTop = Math.max(0, (now.getHours() - 2) * HOUR_HEIGHT);
+        container.scrollTop = targetTop;
+      }
+    });
+  }, [canvasCenter]);
+
+  // Scroll to date when Today button is pressed (small jumps within canvas)
+  useEffect(() => {
+    if (!mountedRef.current) return;
+    const newDate = getDayStart(currentDate);
+    const diff = Math.abs(newDate.getTime() - lastExternalDate.current.getTime());
+    const diffDays = diff / (24 * 60 * 60 * 1000);
+    // Only smooth-scroll for small jumps (Today button etc.), big jumps reload canvas
+    if (diffDays <= 3 && diffDays > 0) {
+      scrollToDate(newDate, true);
+    }
+  }, [currentDate]);
+
+  // Sync header/all-day + update visible date
+  const handleScroll = useCallback(() => {
+    cancelAnimationFrame(rafId.current);
+    rafId.current = requestAnimationFrame(() => {
+      const container = scrollContainerRef.current;
+      if (!container) return;
+      const currentLeft = container.scrollLeft;
+
+      // Sync header and all-day horizontally
+      if (Math.abs(currentLeft - lastScrollLeft.current) > 0.5) {
+        lastScrollLeft.current = currentLeft;
+        if (headerRef.current) headerRef.current.scrollLeft = currentLeft;
+        if (allDayRef.current) allDayRef.current.scrollLeft = currentLeft;
+
+        // Update date display: find the leftmost fully visible day
+        if (onDateChange) {
+          const dayWidth = container.clientWidth * (DAY_WIDTH_VW / 100);
+          const dayIndex = Math.ceil(currentLeft / dayWidth);
+          if (dayIndex >= 0 && dayIndex < days.length) {
+            lastExternalDate.current = days[dayIndex];
+            onDateChange(days[dayIndex]);
+          }
+        }
+      }
+    });
+  }, [onDateChange, days]);
+
+  const totalWidth = `calc(48px + ${TOTAL_DAYS * DAY_WIDTH_VW}vw)`;
+  const daysWidth = `${TOTAL_DAYS * DAY_WIDTH_VW}vw`;
+  const gridHeight = VISIBLE_HOURS * HOUR_HEIGHT;
+
+  return (
+    <div className="flex h-full flex-col overflow-hidden">
+      {/* Header */}
+      <div className="flex border-b border-border">
+        <div className="w-12 flex-none" />
+        <div ref={headerRef} className="flex-1 overflow-hidden" style={{ scrollbarWidth: "none" }}>
+          <div className="flex" style={{ width: daysWidth }}>
+            {days.map((day) => (
+              <div
+                key={day.toISOString()}
+                className={`flex-none border-r border-border/30 px-1 py-1.5 text-center text-xs font-medium ${
+                  isToday(day) ? "bg-primary/10 text-primary" : "text-muted-foreground"
+                }`}
+                style={{ width: `${DAY_WIDTH_VW}vw` }}
+              >
+                {formatDayHeader(day)}
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
+
+      {/* All-day row */}
+      {allDayHeight > 0 && (
+        <div className="flex border-b border-border" style={{ height: allDayHeight }}>
+          <div className="w-12 flex-none text-[10px] text-muted-foreground px-1 py-0.5">ganzt.</div>
+          <div ref={allDayRef} className="relative flex-1 overflow-hidden" style={{ scrollbarWidth: "none" }}>
+            <div className="relative" style={{ width: daysWidth, height: allDayHeight }}>
+              {/* Day column borders */}
+              <div className="absolute inset-0 flex">
+                {days.map((day) => (
+                  <div key={day.toISOString()} className="flex-none border-r border-border/30" style={{ width: `${DAY_WIDTH_VW}vw` }} />
+                ))}
+              </div>
+              {/* Spanning bars */}
+              {allDayBars.map((bar) => (
+                <div
+                  key={bar.event.id}
+                  className="absolute truncate rounded px-1.5 py-0.5 text-[10px] text-white font-medium cursor-pointer"
+                  style={{
+                    left: `${bar.startIndex * DAY_WIDTH_VW}vw`,
+                    width: `${(bar.endIndex - bar.startIndex) * DAY_WIDTH_VW}vw`,
+                    top: bar.row * 26 + 2,
+                    height: 22,
+                    backgroundColor: hexToGlass(bar.color, 0.55),
+                  }}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    handleEventClick(bar.event, e.currentTarget);
+                  }}
+                >
+                  {bar.event.title}
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Main timeline */}
+      <div
+        ref={scrollContainerRef}
+        className="flex-1 overflow-scroll overscroll-none"
+        onScroll={handleScroll}
+        style={{ scrollbarWidth: "none", WebkitOverflowScrolling: "touch" }}
+      >
+        <div className="relative flex" style={{ width: totalWidth, height: gridHeight }}>
+          {/* Time axis */}
+          <div className="sticky left-0 z-10 w-12 flex-none backdrop-blur-xl bg-background/85">
+            {HOURS.map((hour) => (
+              <div
+                key={hour}
+                className={`border-b pr-1 text-right text-[10px] text-muted-foreground ${
+                  hour === 24 ? "border-border" : "border-border/20"
+                }`}
+                style={{ height: HOUR_HEIGHT }}
+              >
+                {formatHour(hour)}
+              </div>
+            ))}
+          </div>
+
+          {/* Day columns */}
+          {days.map((day) => {
+            const key = day.toISOString().slice(0, 10);
+            const dayEvents = (eventsByDay.get(key) || []).filter((e) => !e.isAllDay);
+
+            return (
+              <div
+                key={key}
+                className={`relative flex-none border-r border-border/20 ${isToday(day) ? "bg-primary/5" : ""} cursor-pointer`}
+                style={{ width: `${DAY_WIDTH_VW}vw`, height: gridHeight }}
+                onClick={(e) => {
+                  const rect = e.currentTarget.getBoundingClientRect();
+                  const y = e.clientY - rect.top;
+                  const scrollTop = scrollContainerRef.current?.scrollTop || 0;
+                  const hour = (y + scrollTop) / HOUR_HEIGHT;
+                  handleDayClick(day, hour);
+                }}
+              >
+                {HOURS.map((hour) => (
+                  <div
+                    key={hour}
+                    className={`border-b ${hour === 24 ? "border-border" : "border-border/10"} ${
+                      hour >= 10 && hour < 18 ? "bg-white/[0.03]" : ""
+                    }`}
+                    style={{ height: HOUR_HEIGHT }}
+                  />
+                ))}
+
+                {dayEvents.map((pe) => (
+                  <div
+                    key={pe.event.id}
+                    className="absolute left-0.5 right-0.5 overflow-hidden rounded-lg px-1 py-0.5 text-[10px] leading-tight text-white cursor-pointer"
+                    style={{
+                      top: pe.top,
+                      height: pe.height,
+                      backgroundColor: hexToGlass(pe.color, 0.55),
+                      backdropFilter: "blur(8px)",
+                    }}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      handleEventClick(pe.event, e.currentTarget);
+                    }}
+                  >
+                    <div className="font-medium truncate">{pe.event.title}</div>
+                  </div>
+                ))}
+
+                {isToday(day) && (
+                  <div
+                    className="absolute left-0 right-0 z-[5] border-t-2 border-red-500"
+                    style={{ top: (new Date().getHours() + new Date().getMinutes() / 60) * HOUR_HEIGHT }}
+                  >
+                    <div className="absolute -left-1 -top-1.5 h-3 w-3 rounded-full bg-red-500" />
+                  </div>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      </div>
+      <EventModal
+        isOpen={isEventModalOpen}
+        onClose={handleEventModalClose}
+        event={selectedEvent}
+        defaultDate={selectedDate}
+        defaultEndDate={selectedEndDate}
+      />
+      {quickViewItem && (
+        <EventQuickView
+          isOpen={!!quickViewItem}
+          onClose={handleQuickViewClose}
+          item={quickViewItem}
+          onEdit={handleQuickViewEdit}
+          onDelete={handleQuickViewDelete}
+          isTask={false}
+          referenceElement={clickedElement}
+        />
+      )}
+    </div>
+  );
+}

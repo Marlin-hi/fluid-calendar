@@ -1,3 +1,4 @@
+import { hexToGlass, hexToBorder } from "@/lib/utils";
 import { useCallback, useEffect, useRef, useState } from "react";
 
 import type {
@@ -57,6 +58,14 @@ export function DayView({ currentDate, onDateClick }: DayViewProps) {
     }>
   >([]);
   const calendarRef = useRef<FullCalendar>(null);
+  const [isMobile, setIsMobile] = useState(false);
+
+  useEffect(() => {
+    const check = () => setIsMobile(window.innerWidth < 768);
+    check();
+    window.addEventListener("resize", check);
+    return () => window.removeEventListener("resize", check);
+  }, []);
   const tasks = useTaskStore((state) => state.tasks);
   const [quickViewItem, setQuickViewItem] = useState<CalendarEvent | Task>();
   const [isTask, setIsTask] = useState(false);
@@ -80,13 +89,13 @@ export function DayView({ currentDate, onDateClick }: DayViewProps) {
           end: newDate(item.end),
           location: item.location,
           backgroundColor:
-            item.feedId === "tasks"
+            hexToGlass(item.feedId === "tasks"
               ? item.color || "#4f46e5"
-              : feeds.find((f) => f.id === item.feedId)?.color || "#3b82f6",
+              : feeds.find((f) => f.id === item.feedId)?.color || "#3b82f6"),
           borderColor:
-            item.feedId === "tasks"
+            hexToBorder(item.feedId === "tasks"
               ? item.color || "#4f46e5"
-              : feeds.find((f) => f.id === item.feedId)?.color || "#3b82f6",
+              : feeds.find((f) => f.id === item.feedId)?.color || "#3b82f6"),
           allDay: item.allDay,
           classNames: [
             item.extendedProps?.isTask ? "calendar-task" : "calendar-event",
@@ -309,8 +318,8 @@ export function DayView({ currentDate, onDateClick }: DayViewProps) {
         dateClick={(arg) => onDateClick?.(arg.date)}
         eventClick={handleEventClick}
         select={handleDateSelect}
-        selectable={true}
-        selectMirror={true}
+        selectable={!isMobile}
+        selectMirror={!isMobile}
         datesSet={handleDatesSet}
         eventContent={renderEventContent}
       />

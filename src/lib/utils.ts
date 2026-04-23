@@ -45,3 +45,19 @@ export function formatShortcut(shortcut?: string): string {
   // For letter-based shortcuts, just return the shortcut as is
   return shortcut;
 }
+
+
+
+export function hexToGlass(hex: string, alpha: number = 0.55): string {
+  const r = parseInt(hex.slice(1, 3), 16);
+  const g = parseInt(hex.slice(3, 5), 16);
+  const b = parseInt(hex.slice(5, 7), 16);
+  return `rgba(${r}, ${g}, ${b}, ${alpha})`;
+}
+
+export function hexToBorder(hex: string, alpha: number = 0.7): string {
+  const r = parseInt(hex.slice(1, 3), 16);
+  const g = parseInt(hex.slice(3, 5), 16);
+  const b = parseInt(hex.slice(5, 7), 16);
+  return `rgba(${r}, ${g}, ${b}, ${alpha})`;
+}

@@ -1,0 +1,380 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Kalender Design Preview</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: #111; color: #fff; }
+  h1 { text-align: center; padding: 40px 20px 20px; font-size: 24px; font-weight: 300; letter-spacing: 2px; }
+  .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(500px, 1fr)); gap: 32px; padding: 20px 32px 60px; }
+
+  .card {
+    border-radius: 16px;
+    overflow: hidden;
+    position: relative;
+    height: 420px;
+  }
+  .card-bg {
+    position: absolute; inset: 0;
+    background-size: cover;
+    background-position: center;
+  }
+  .card-overlay {
+    position: absolute; inset: 0;
+  }
+  .card-content {
+    position: relative; z-index: 1;
+    height: 100%;
+    display: flex;
+    flex-direction: column;
+  }
+  .card-label {
+    padding: 16px 20px;
+    font-size: 11px;
+    letter-spacing: 3px;
+    text-transform: uppercase;
+    font-weight: 600;
+  }
+
+  /* Mock calendar UI */
+  .mock-nav {
+    display: flex;
+    align-items: center;
+    padding: 8px 16px;
+    gap: 12px;
+    font-size: 13px;
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+  }
+  .mock-nav-pill {
+    padding: 4px 12px;
+    border-radius: 6px;
+    font-size: 12px;
+    font-weight: 500;
+  }
+  .mock-header {
+    display: flex;
+    align-items: center;
+    padding: 6px 16px;
+    gap: 8px;
+    font-size: 12px;
+  }
+  .mock-header-title {
+    font-size: 14px;
+    font-weight: 600;
+    margin-left: 8px;
+  }
+  .mock-view-btn {
+    padding: 3px 10px;
+    border-radius: 6px;
+    font-size: 11px;
+    margin-left: auto;
+  }
+  .mock-grid {
+    flex: 1;
+    display: grid;
+    grid-template-columns: 50px 1fr 1fr 1fr;
+    gap: 1px;
+    padding: 0 1px;
+    overflow: hidden;
+  }
+  .mock-grid-header {
+    text-align: center;
+    padding: 6px 4px;
+    font-size: 11px;
+    font-weight: 600;
+  }
+  .mock-time {
+    font-size: 10px;
+    padding: 4px 6px;
+    text-align: right;
+  }
+  .mock-cell {
+    min-height: 40px;
+  }
+  .mock-event {
+    border-radius: 4px;
+    padding: 4px 6px;
+    font-size: 10px;
+    font-weight: 500;
+    margin: 2px;
+    min-height: 50px;
+  }
+  .mock-event-tall {
+    min-height: 80px;
+  }
+
+  /* === MORNING 06-10 === */
+  .theme-morning .card-bg { background-image: url('/bg/morning.jpg'); }
+  .theme-morning .card-overlay { background: linear-gradient(135deg, rgba(62,48,20,0.75) 0%, rgba(90,70,30,0.55) 50%, rgba(120,100,40,0.45) 100%); }
+  .theme-morning .card-label { color: #f5e6c8; }
+  .theme-morning .mock-nav { background: rgba(80,60,20,0.5); color: #f0dbb8; border-bottom: 1px solid rgba(200,170,100,0.2); }
+  .theme-morning .mock-nav-pill { background: rgba(210,170,80,0.3); color: #ffe8b0; }
+  .theme-morning .mock-header { color: #e8d4a8; }
+  .theme-morning .mock-view-btn { background: rgba(210,170,80,0.25); color: #ffe0a0; }
+  .theme-morning .mock-grid { background: rgba(60,45,15,0.3); }
+  .theme-morning .mock-grid-header { color: #e0c890; border-bottom: 1px solid rgba(200,170,100,0.15); }
+  .theme-morning .mock-time { color: rgba(220,190,130,0.6); }
+  .theme-morning .mock-cell { border-bottom: 1px solid rgba(200,170,100,0.08); border-right: 1px solid rgba(200,170,100,0.08); }
+  .theme-morning .mock-event { background: rgba(210,170,80,0.4); color: #fff5e0; border-left: 3px solid #d4a840; }
+  .theme-morning .mock-event.alt { background: rgba(140,180,80,0.35); color: #f0ffe0; border-left: 3px solid #8cb850; }
+
+  /* === MIDDAY 10-14 === */
+  .theme-midday .card-bg { background-image: url('/bg/midday.jpg'); }
+  .theme-midday .card-overlay { background: linear-gradient(180deg, rgba(180,210,230,0.5) 0%, rgba(140,180,210,0.4) 50%, rgba(200,220,240,0.5) 100%); }
+  .theme-midday .card-label { color: #2a5070; }
+  .theme-midday .mock-nav { background: rgba(220,235,250,0.6); color: #2a4a6a; border-bottom: 1px solid rgba(120,160,200,0.25); }
+  .theme-midday .mock-nav-pill { background: rgba(60,130,200,0.2); color: #1a4a7a; }
+  .theme-midday .mock-header { color: #2a4a6a; }
+  .theme-midday .mock-view-btn { background: rgba(60,130,200,0.15); color: #1a4a7a; }
+  .theme-midday .mock-grid { background: rgba(230,240,250,0.35); }
+  .theme-midday .mock-grid-header { color: #2a5070; border-bottom: 1px solid rgba(100,150,200,0.2); }
+  .theme-midday .mock-time { color: rgba(40,80,120,0.5); }
+  .theme-midday .mock-cell { border-bottom: 1px solid rgba(100,150,200,0.1); border-right: 1px solid rgba(100,150,200,0.1); }
+  .theme-midday .mock-event { background: rgba(60,140,220,0.3); color: #1a3a5a; border-left: 3px solid #3c8cdc; }
+  .theme-midday .mock-event.alt { background: rgba(80,180,160,0.25); color: #1a4a40; border-left: 3px solid #50b4a0; }
+
+  /* === AFTERNOON 14-17 === */
+  .theme-afternoon .card-bg { background-image: url('/bg/afternoon.jpg'); }
+  .theme-afternoon .card-overlay { background: linear-gradient(180deg, rgba(20,60,80,0.65) 0%, rgba(30,70,90,0.5) 50%, rgba(20,50,70,0.6) 100%); }
+  .theme-afternoon .card-label { color: #a0d0e0; }
+  .theme-afternoon .mock-nav { background: rgba(15,50,70,0.5); color: #b0d8e8; border-bottom: 1px solid rgba(100,180,210,0.15); }
+  .theme-afternoon .mock-nav-pill { background: rgba(80,170,200,0.25); color: #c0e0f0; }
+  .theme-afternoon .mock-header { color: #90c8d8; }
+  .theme-afternoon .mock-view-btn { background: rgba(80,170,200,0.2); color: #b0dae8; }
+  .theme-afternoon .mock-grid { background: rgba(15,45,60,0.35); }
+  .theme-afternoon .mock-grid-header { color: #80c0d0; border-bottom: 1px solid rgba(100,180,210,0.12); }
+  .theme-afternoon .mock-time { color: rgba(140,200,220,0.5); }
+  .theme-afternoon .mock-cell { border-bottom: 1px solid rgba(100,180,210,0.06); border-right: 1px solid rgba(100,180,210,0.06); }
+  .theme-afternoon .mock-event { background: rgba(60,160,190,0.35); color: #d0f0ff; border-left: 3px solid #3ca0be; }
+  .theme-afternoon .mock-event.alt { background: rgba(100,140,180,0.3); color: #d0e4f0; border-left: 3px solid #6490b4; }
+
+  /* === GOLDEN HOUR 17-20 === */
+  .theme-golden .card-bg { background-image: url('/bg/golden.jpg'); }
+  .theme-golden .card-overlay { background: linear-gradient(135deg, rgba(60,40,20,0.7) 0%, rgba(80,50,25,0.5) 50%, rgba(50,35,20,0.6) 100%); }
+  .theme-golden .card-label { color: #f0d0a0; }
+  .theme-golden .mock-nav { background: rgba(70,45,20,0.5); color: #e8c898; border-bottom: 1px solid rgba(220,170,100,0.2); }
+  .theme-golden .mock-nav-pill { background: rgba(220,160,60,0.3); color: #ffe0a0; }
+  .theme-golden .mock-header { color: #dcc090; }
+  .theme-golden .mock-view-btn { background: rgba(220,160,60,0.25); color: #ffd890; }
+  .theme-golden .mock-grid { background: rgba(50,35,15,0.3); }
+  .theme-golden .mock-grid-header { color: #d4b480; border-bottom: 1px solid rgba(200,150,80,0.15); }
+  .theme-golden .mock-time { color: rgba(200,160,100,0.5); }
+  .theme-golden .mock-cell { border-bottom: 1px solid rgba(200,150,80,0.08); border-right: 1px solid rgba(200,150,80,0.08); }
+  .theme-golden .mock-event { background: rgba(220,150,50,0.35); color: #fff0d0; border-left: 3px solid #dc9632; }
+  .theme-golden .mock-event.alt { background: rgba(180,100,60,0.3); color: #ffe0c0; border-left: 3px solid #b4643c; }
+
+  /* === EVENING 20-23 === */
+  .theme-evening .card-bg { background-image: url('/bg/evening.jpg'); }
+  .theme-evening .card-overlay { background: linear-gradient(180deg, rgba(40,20,30,0.75) 0%, rgba(50,25,35,0.6) 50%, rgba(30,15,25,0.7) 100%); }
+  .theme-evening .card-label { color: #d0a0b0; }
+  .theme-evening .mock-nav { background: rgba(45,20,30,0.5); color: #c8a0b0; border-bottom: 1px solid rgba(180,120,140,0.2); }
+  .theme-evening .mock-nav-pill { background: rgba(200,120,100,0.3); color: #f0c0b0; }
+  .theme-evening .mock-header { color: #c090a0; }
+  .theme-evening .mock-view-btn { background: rgba(200,120,100,0.25); color: #e8b0a0; }
+  .theme-evening .mock-grid { background: rgba(35,15,25,0.35); }
+  .theme-evening .mock-grid-header { color: #b08090; border-bottom: 1px solid rgba(160,100,120,0.15); }
+  .theme-evening .mock-time { color: rgba(180,120,140,0.5); }
+  .theme-evening .mock-cell { border-bottom: 1px solid rgba(160,100,120,0.08); border-right: 1px solid rgba(160,100,120,0.08); }
+  .theme-evening .mock-event { background: rgba(200,100,80,0.35); color: #ffd8c8; border-left: 3px solid #c86450; }
+  .theme-evening .mock-event.alt { background: rgba(140,80,140,0.3); color: #e0c0e0; border-left: 3px solid #8c508c; }
+
+  /* === NIGHT 23-06 === */
+  .theme-night .card-bg { background-image: url('/bg/night.jpg'); }
+  .theme-night .card-overlay { background: linear-gradient(180deg, rgba(15,15,30,0.8) 0%, rgba(20,20,40,0.65) 50%, rgba(10,10,25,0.75) 100%); }
+  .theme-night .card-label { color: #8090b0; }
+  .theme-night .mock-nav { background: rgba(15,15,35,0.5); color: #8898b8; border-bottom: 1px solid rgba(80,90,140,0.2); }
+  .theme-night .mock-nav-pill { background: rgba(70,90,160,0.3); color: #a0b0d0; }
+  .theme-night .mock-header { color: #7888a8; }
+  .theme-night .mock-view-btn { background: rgba(70,90,160,0.25); color: #98a8c8; }
+  .theme-night .mock-grid { background: rgba(10,10,25,0.35); }
+  .theme-night .mock-grid-header { color: #6878a0; border-bottom: 1px solid rgba(70,80,130,0.15); }
+  .theme-night .mock-time { color: rgba(100,120,170,0.5); }
+  .theme-night .mock-cell { border-bottom: 1px solid rgba(70,80,130,0.08); border-right: 1px solid rgba(70,80,130,0.08); }
+  .theme-night .mock-event { background: rgba(60,80,160,0.35); color: #c0d0f0; border-left: 3px solid #3c50a0; }
+  .theme-night .mock-event.alt { background: rgba(80,140,100,0.25); color: #c0e8d0; border-left: 3px solid #50a064; }
+</style>
+</head>
+<body>
+<h1>KALENDER DESIGN SYSTEM</h1>
+<div class="grid">
+
+  <div class="card theme-morning">
+    <div class="card-bg"></div>
+    <div class="card-overlay"></div>
+    <div class="card-content">
+      <div class="card-label">06:00 - 10:00 Morgen</div>
+      <div class="mock-nav">
+        <span class="mock-nav-pill">Calendar</span>
+        <span>Tasks</span>
+        <span>Focus</span>
+      </div>
+      <div class="mock-header">
+        <span>Today</span>
+        <span class="mock-header-title">Mittwoch, 8. April 2026</span>
+        <span class="mock-view-btn">Week</span>
+      </div>
+      <div class="mock-grid">
+        <div class="mock-grid-header"></div>
+        <div class="mock-grid-header">Mi 4/8</div>
+        <div class="mock-grid-header">Do 4/9</div>
+        <div class="mock-grid-header">Fr 4/10</div>
+        <div class="mock-time">07:00</div><div class="mock-cell"></div><div class="mock-cell"></div><div class="mock-cell"></div>
+        <div class="mock-time">08:00</div><div class="mock-cell"></div><div class="mock-cell"></div><div class="mock-cell"></div>
+        <div class="mock-time">09:00</div><div class="mock-cell"><div class="mock-event">Kamera bei Leistenschneider</div></div><div class="mock-cell"></div><div class="mock-cell"></div>
+        <div class="mock-time">10:00</div><div class="mock-cell"></div><div class="mock-cell"><div class="mock-event alt mock-event-tall">Klausur: Marketing</div></div><div class="mock-cell"></div>
+        <div class="mock-time">11:00</div><div class="mock-cell"></div><div class="mock-cell"></div><div class="mock-cell"></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="card theme-midday">
+    <div class="card-bg"></div>
+    <div class="card-overlay"></div>
+    <div class="card-content">
+      <div class="card-label">10:00 - 14:00 Mittag</div>
+      <div class="mock-nav">
+        <span class="mock-nav-pill">Calendar</span>
+        <span>Tasks</span>
+        <span>Focus</span>
+      </div>
+      <div class="mock-header">
+        <span>Today</span>
+        <span class="mock-header-title">Mittwoch, 8. April 2026</span>
+        <span class="mock-view-btn">Week</span>
+      </div>
+      <div class="mock-grid">
+        <div class="mock-grid-header"></div>
+        <div class="mock-grid-header">Mi 4/8</div>
+        <div class="mock-grid-header">Do 4/9</div>
+        <div class="mock-grid-header">Fr 4/10</div>
+        <div class="mock-time">10:00</div><div class="mock-cell"></div><div class="mock-cell"><div class="mock-event mock-event-tall">Klausur: Marketing</div></div><div class="mock-cell"></div>
+        <div class="mock-time">11:00</div><div class="mock-cell"></div><div class="mock-cell"></div><div class="mock-cell"></div>
+        <div class="mock-time">12:00</div><div class="mock-cell"><div class="mock-event alt mock-event-tall">Klausur: Statistik</div></div><div class="mock-cell"></div><div class="mock-cell"></div>
+        <div class="mock-time">13:00</div><div class="mock-cell"></div><div class="mock-cell"></div><div class="mock-cell"><div class="mock-event">Questions Promptheus</div></div>
+        <div class="mock-time">14:00</div><div class="mock-cell"></div><div class="mock-cell"></div><div class="mock-cell"></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="card theme-afternoon">
+    <div class="card-bg"></div>
+    <div class="card-overlay"></div>
+    <div class="card-content">
+      <div class="card-label">14:00 - 17:00 Nachmittag</div>
+      <div class="mock-nav">
+        <span class="mock-nav-pill">Calendar</span>
+        <span>Tasks</span>
+        <span>Focus</span>
+      </div>
+      <div class="mock-header">
+        <span>Today</span>
+        <span class="mock-header-title">Mittwoch, 8. April 2026</span>
+        <span class="mock-view-btn">Week</span>
+      </div>
+      <div class="mock-grid">
+        <div class="mock-grid-header"></div>
+        <div class="mock-grid-header">Mi 4/8</div>
+        <div class="mock-grid-header">Do 4/9</div>
+        <div class="mock-grid-header">Fr 4/10</div>
+        <div class="mock-time">14:00</div><div class="mock-cell"></div><div class="mock-cell"><div class="mock-event alt mock-event-tall">Questions Promptheus</div></div><div class="mock-cell"></div>
+        <div class="mock-time">15:00</div><div class="mock-cell"><div class="mock-event">Marie bei Oma</div></div><div class="mock-cell"></div><div class="mock-cell"></div>
+        <div class="mock-time">16:00</div><div class="mock-cell"></div><div class="mock-cell"></div><div class="mock-cell"></div>
+        <div class="mock-time">17:00</div><div class="mock-cell"></div><div class="mock-cell"></div><div class="mock-cell"></div>
+        <div class="mock-time">18:00</div><div class="mock-cell"></div><div class="mock-cell"></div><div class="mock-cell"></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="card theme-golden">
+    <div class="card-bg"></div>
+    <div class="card-overlay"></div>
+    <div class="card-content">
+      <div class="card-label">17:00 - 20:00 Goldene Stunde</div>
+      <div class="mock-nav">
+        <span class="mock-nav-pill">Calendar</span>
+        <span>Tasks</span>
+        <span>Focus</span>
+      </div>
+      <div class="mock-header">
+        <span>Today</span>
+        <span class="mock-header-title">Mittwoch, 8. April 2026</span>
+        <span class="mock-view-btn">Week</span>
+      </div>
+      <div class="mock-grid">
+        <div class="mock-grid-header"></div>
+        <div class="mock-grid-header">Mi 4/8</div>
+        <div class="mock-grid-header">Do 4/9</div>
+        <div class="mock-grid-header">Fr 4/10</div>
+        <div class="mock-time">17:00</div><div class="mock-cell"></div><div class="mock-cell"></div><div class="mock-cell"></div>
+        <div class="mock-time">18:00</div><div class="mock-cell"><div class="mock-event">Osternester?</div></div><div class="mock-cell"></div><div class="mock-cell"></div>
+        <div class="mock-time">19:00</div><div class="mock-cell"></div><div class="mock-cell"></div><div class="mock-cell"><div class="mock-event alt mock-event-tall">Tangonacht</div></div>
+        <div class="mock-time">20:00</div><div class="mock-cell"></div><div class="mock-cell"></div><div class="mock-cell"></div>
+        <div class="mock-time">21:00</div><div class="mock-cell"></div><div class="mock-cell"><div class="mock-event">Turnen</div></div><div class="mock-cell"></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="card theme-evening">
+    <div class="card-bg"></div>
+    <div class="card-overlay"></div>
+    <div class="card-content">
+      <div class="card-label">20:00 - 23:00 Abend</div>
+      <div class="mock-nav">
+        <span class="mock-nav-pill">Calendar</span>
+        <span>Tasks</span>
+        <span>Focus</span>
+      </div>
+      <div class="mock-header">
+        <span>Today</span>
+        <span class="mock-header-title">Mittwoch, 8. April 2026</span>
+        <span class="mock-view-btn">Week</span>
+      </div>
+      <div class="mock-grid">
+        <div class="mock-grid-header"></div>
+        <div class="mock-grid-header">Mi 4/8</div>
+        <div class="mock-grid-header">Do 4/9</div>
+        <div class="mock-grid-header">Fr 4/10</div>
+        <div class="mock-time">20:00</div><div class="mock-cell"></div><div class="mock-cell"></div><div class="mock-cell"></div>
+        <div class="mock-time">21:00</div><div class="mock-cell"></div><div class="mock-cell"><div class="mock-event mock-event-tall">Turnen</div></div><div class="mock-cell"><div class="mock-event alt">Tangonacht</div></div>
+        <div class="mock-time">22:00</div><div class="mock-cell"></div><div class="mock-cell"></div><div class="mock-cell"></div>
+        <div class="mock-time">23:00</div><div class="mock-cell"></div><div class="mock-cell"></div><div class="mock-cell"></div>
+        <div class="mock-time">00:00</div><div class="mock-cell"></div><div class="mock-cell"></div><div class="mock-cell"></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="card theme-night">
+    <div class="card-bg"></div>
+    <div class="card-overlay"></div>
+    <div class="card-content">
+      <div class="card-label">23:00 - 06:00 Nacht</div>
+      <div class="mock-nav">
+        <span class="mock-nav-pill">Calendar</span>
+        <span>Tasks</span>
+        <span>Focus</span>
+      </div>
+      <div class="mock-header">
+        <span>Today</span>
+        <span class="mock-header-title">Mittwoch, 8. April 2026</span>
+        <span class="mock-view-btn">Week</span>
+      </div>
+      <div class="mock-grid">
+        <div class="mock-grid-header"></div>
+        <div class="mock-grid-header">Mi 4/8</div>
+        <div class="mock-grid-header">Do 4/9</div>
+        <div class="mock-grid-header">Fr 4/10</div>
+        <div class="mock-time">23:00</div><div class="mock-cell"></div><div class="mock-cell"></div><div class="mock-cell"></div>
+        <div class="mock-time">00:00</div><div class="mock-cell"></div><div class="mock-cell"></div><div class="mock-cell"></div>
+        <div class="mock-time">01:00</div><div class="mock-cell"></div><div class="mock-cell"></div><div class="mock-cell"></div>
+        <div class="mock-time">02:00</div><div class="mock-cell"></div><div class="mock-cell"></div><div class="mock-cell"></div>
+        <div class="mock-time">03:00</div><div class="mock-cell"></div><div class="mock-cell"></div><div class="mock-cell"></div>
+      </div>
+    </div>
+  </div>
+
+</div>
+</body>
+</html>

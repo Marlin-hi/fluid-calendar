@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 
 import { BsKanban, BsListTask } from "react-icons/bs";
+import { HiLightningBolt, HiMenu } from "react-icons/hi";
 import { toast } from "sonner";
 
 import { ProjectSidebar } from "@/components/projects/ProjectSidebar";
@@ -44,6 +45,11 @@ export default function TasksPage() {
   const [initialProjectId, setInitialProjectId] = useState<
     string | null | undefined
   >(undefined);
+  const [sidebarOpen, setSidebarOpen] = useState(false);
+
+  useEffect(() => {
+    setSidebarOpen(window.innerWidth >= 768);
+  }, []);
 
   // Fetch tasks and tags on mount
   useEffect(() => {
@@ -111,13 +117,35 @@ export default function TasksPage() {
   };
 
   return (
-    <div className="flex h-full">
-      <ProjectSidebar />
+    <div className="relative flex h-full">
+      {sidebarOpen && (
+        <div
+          className="fixed inset-0 z-30 bg-black/40 md:hidden"
+          onClick={() => setSidebarOpen(false)}
+        />
+      )}
+      <div
+        className={cn(
+          "h-full flex-none",
+          "fixed z-40 md:relative md:z-auto",
+          "transform transition-transform duration-300 ease-in-out md:transform-none",
+          sidebarOpen ? "translate-x-0" : "-translate-x-full md:hidden md:translate-x-0"
+        )}
+      >
+        <ProjectSidebar />
+      </div>
       <div className="flex min-w-0 flex-1 flex-col" data-task-page>
-        <div className="border-b border-border px-6 py-4">
+        <div className="border-b border-border px-4 py-4 md:px-6">
           <div className="flex items-center justify-between">
-            <div className="flex items-center gap-4">
-              <h1 className="text-2xl font-bold text-foreground">Tasks</h1>
+            <div className="flex min-w-0 items-center gap-2 md:gap-4">
+              <button
+                onClick={() => setSidebarOpen(!sidebarOpen)}
+                className="rounded-lg p-1.5 text-foreground hover:bg-muted md:hidden"
+                title="Toggle Projects"
+              >
+                <HiMenu className="h-5 w-5" />
+              </button>
+              <h1 className="text-lg font-bold text-foreground md:text-2xl">Tasks</h1>
               <div className="flex items-center gap-1 rounded-lg bg-muted p-1">
                 <button
                   onClick={() => setViewMode("list")}
@@ -148,11 +176,14 @@ export default function TasksPage() {
             <div className="flex items-center gap-2">
               <Button
                 variant="secondary"
+                className="flex-shrink-0 gap-1 px-2 sm:px-3"
                 onClick={() => {
                   scheduleAllTasks();
                 }}
+                title="Auto Schedule"
               >
-                Auto Schedule
+                <HiLightningBolt className="h-4 w-4" />
+                <span className="hidden sm:inline">Auto Schedule</span>
               </Button>
               <Button
                 data-create-task-button

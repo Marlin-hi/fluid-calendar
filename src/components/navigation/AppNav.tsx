@@ -49,11 +49,11 @@ export function AppNav({ className }: AppNavProps) {
     >
       <div className="h-full px-4">
         <div className="flex h-full items-center justify-between">
-          <div className="flex items-center gap-8">
+          <div className="flex items-center gap-2 md:gap-8">
             <Link
               href="/calendar"
               className={cn(
-                "flex items-center mr-8",
+                "hidden flex-shrink-0 items-center md:mr-8 md:flex",
                 pathname === "/calendar" ? "text-primary" : "text-foreground hover:text-primary"
               )}
             >
@@ -74,7 +74,7 @@ export function AppNav({ className }: AppNavProps) {
                   key={link.href}
                   href={link.href}
                   className={cn(
-                    "inline-flex items-center gap-2 rounded-md px-4 py-2 text-sm font-medium",
+                    "inline-flex items-center gap-1.5 rounded-md px-2.5 py-1.5 text-sm font-medium md:gap-2 md:px-4 md:py-2",
                     isActive
                       ? "bg-primary/10 text-primary"
                       : "text-foreground hover:bg-muted"
@@ -86,27 +86,29 @@ export function AppNav({ className }: AppNavProps) {
               );
             })}
           </div>
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-1 md:gap-2">
             <button
               onClick={openCommandPalette}
-              className="flex items-center gap-1 rounded-md px-2 py-1.5 text-xs text-muted-foreground hover:bg-muted hover:text-foreground"
-              title="Search or run a command (⌘K)"
+              className="flex items-center gap-1 rounded-md px-1.5 py-1.5 text-xs text-muted-foreground hover:bg-muted hover:text-foreground"
+              title="Search or run a command"
             >
               <HiOutlineSearch className="h-4 w-4" />
-              <span className="hidden sm:inline">Search</span>
-              <kbd className="ml-1 hidden rounded bg-muted px-1 py-0.5 text-xs sm:inline">
+              <span className="hidden md:inline">Search</span>
+              <kbd className="ml-1 hidden rounded bg-muted px-1 py-0.5 text-xs md:inline">
                 ⌘K
               </kbd>
             </button>
-            <ThemeToggle />
+            <div className="hidden md:block">
+              <ThemeToggle />
+            </div>
             <button
               onClick={() => setShortcutsOpen(true)}
-              className="flex items-center gap-1 rounded-md px-2 py-1.5 text-xs text-muted-foreground hover:bg-muted hover:text-foreground"
+              className="hidden items-center gap-1 rounded-md px-2 py-1.5 text-xs text-muted-foreground hover:bg-muted hover:text-foreground md:flex"
               title="View Keyboard Shortcuts (Press ?)"
             >
               <RiKeyboardLine className="h-4 w-4" />
-              <span className="hidden sm:inline">Shortcuts</span>
-              <kbd className="ml-1 hidden rounded bg-muted px-1 py-0.5 text-xs sm:inline">
+              <span className="hidden md:inline">Shortcuts</span>
+              <kbd className="ml-1 hidden rounded bg-muted px-1 py-0.5 text-xs md:inline">
                 ?
               </kbd>
             </button>

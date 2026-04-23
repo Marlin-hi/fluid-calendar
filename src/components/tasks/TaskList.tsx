@@ -4,12 +4,6 @@ import { HiX } from "react-icons/hi";
 
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
 import { Input } from "@/components/ui/input";
 import {
   Select,
@@ -22,7 +16,6 @@ import {
 import { newDate } from "@/lib/date-utils";
 
 import { useProjectStore } from "@/store/project";
-import { useTaskStore } from "@/store/task";
 import { useTaskListViewSettings } from "@/store/taskListViewSettings";
 
 import { EnergyLevel, Task, TaskStatus, TimePreference } from "@/types/task";
@@ -59,13 +52,7 @@ export function TaskList({
     setFilters,
     resetFilters,
   } = useTaskListViewSettings();
-  const { activeProject, projects } = useProjectStore();
-  const selectedTaskIds = useTaskStore((s) => s.selectedTaskIds);
-  const selectAll = useTaskStore((s) => s.selectAll);
-  const clearSelection = useTaskStore((s) => s.clearSelection);
-  const bulkAssignToProject = useTaskStore((s) => s.bulkAssignToProject);
-  const bulkDelete = useTaskStore((s) => s.bulkDelete);
-  const bulkSetStatus = useTaskStore((s) => s.bulkSetStatus);
+  const { activeProject } = useProjectStore();
 
   const handleSort = (column: typeof sortBy) => {
     if (sortBy === column) {
@@ -227,41 +214,6 @@ export function TaskList({
     tagIds?.length ||
     search;
 
-  const orderedIds = useMemo(
-    () => sortedTasks.map((t) => t.id),
-    [sortedTasks]
-  );
-  const selectedCount = orderedIds.filter((id) =>
-    selectedTaskIds.has(id)
-  ).length;
-  const allSelected = orderedIds.length > 0 && selectedCount === orderedIds.length;
-  const someSelected = selectedCount > 0 && !allSelected;
-
-  const handleBulkAssignProject = (projectId: string | null) => {
-    const ids = Array.from(selectedTaskIds);
-    if (ids.length === 0) return;
-    bulkAssignToProject(ids, projectId).then(() => clearSelection());
-  };
-
-  const handleBulkSetStatus = (newStatus: TaskStatus) => {
-    const ids = Array.from(selectedTaskIds);
-    if (ids.length === 0) return;
-    bulkSetStatus(ids, newStatus).then(() => clearSelection());
-  };
-
-  const handleBulkDelete = () => {
-    const ids = Array.from(selectedTaskIds);
-    if (ids.length === 0) return;
-    if (
-      !confirm(
-        `Delete ${ids.length} task${ids.length === 1 ? "" : "s"}? This cannot be undone.`
-      )
-    ) {
-      return;
-    }
-    bulkDelete(ids);
-  };
-
   return (
     <div className="flex h-full flex-col">
       <div className="mb-4 flex items-center gap-4">
@@ -353,74 +305,6 @@ export function TaskList({
         </div>
       </div>
 
-      {selectedCount > 0 && (
-        <div className="mb-3 flex flex-wrap items-center gap-2 rounded-lg border border-primary/30 bg-primary/5 px-3 py-2">
-          <span className="text-sm font-medium">
-            {selectedCount} selected
-          </span>
-
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <Button variant="outline" size="sm" className="h-8">
-                Assign to project
-              </Button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="start">
-              <DropdownMenuItem onClick={() => handleBulkAssignProject(null)}>
-                No project
-              </DropdownMenuItem>
-              {projects
-                .filter((p) => p.id !== "no-project")
-                .map((project) => (
-                  <DropdownMenuItem
-                    key={project.id}
-                    onClick={() => handleBulkAssignProject(project.id)}
-                  >
-                    {project.name}
-                  </DropdownMenuItem>
-                ))}
-            </DropdownMenuContent>
-          </DropdownMenu>
-
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <Button variant="outline" size="sm" className="h-8">
-                Set status
-              </Button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="start">
-              {Object.values(TaskStatus).map((s) => (
-                <DropdownMenuItem
-                  key={s}
-                  onClick={() => handleBulkSetStatus(s)}
-                >
-                  {formatEnumValue(s)}
-                </DropdownMenuItem>
-              ))}
-            </DropdownMenuContent>
-          </DropdownMenu>
-
-          <Button
-            variant="destructive"
-            size="sm"
-            className="h-8"
-            onClick={handleBulkDelete}
-          >
-            Delete
-          </Button>
-
-          <Button
-            variant="ghost"
-            size="sm"
-            className="h-8"
-            onClick={clearSelection}
-          >
-            <HiX className="mr-1 h-4 w-4" />
-            Clear
-          </Button>
-        </div>
-      )}
-
       <div className="flex-1 rounded-lg border bg-background">
         <div
           className="overflow-auto"
@@ -429,24 +313,6 @@ export function TaskList({
           <table className="min-w-full divide-y divide-border">
             <thead className="sticky top-0 bg-muted">
               <tr>
-                <th
-                  scope="col"
-                  className="w-10 px-3 py-2 text-left text-xs font-medium text-muted-foreground"
-                >
-                  <Checkbox
-                    checked={
-                      allSelected ? true : someSelected ? "indeterminate" : false
-                    }
-                    onCheckedChange={(checked) => {
-                      if (checked) {
-                        selectAll(orderedIds);
-                      } else {
-                        clearSelection();
-                      }
-                    }}
-                    aria-label="Select all tasks"
-                  />
-                </th>
                 <th
                   scope="col"
                   className="w-8 px-3 py-2 text-left text-xs font-medium text-muted-foreground"
@@ -541,7 +407,6 @@ export function TaskList({
                 <TaskRow
                   key={task.id}
                   task={task}
-                  orderedIds={orderedIds}
                   onEdit={onEdit}
                   onDelete={onDelete}
                   onStatusChange={onStatusChange}
