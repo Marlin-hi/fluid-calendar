@@ -349,13 +349,6 @@ export function WeekView({ currentDate, onDateClick }: WeekViewProps) {
 
   return (
     <div className="relative h-full [&_.fc-daygrid-day-events]:!min-h-0 [&_.fc-daygrid-day-frame]:!min-h-0 [&_.fc-timegrid-axis-cushion]:!py-1 [&_.fc-timegrid-slot-label]:!py-1 [&_.fc-timegrid-slot]:!h-[35px]">
-      <div
-        onClick={() => setDebugInfo("")}
-        className="fixed left-1 right-1 bottom-1 z-[99999] rounded bg-red-900 px-2 py-1 text-[10px] text-yellow-200 font-mono"
-        style={{ pointerEvents: "auto" }}
-      >
-        v6 {debugInfo || "noch nichts getippt"}
-      </div>
       <FullCalendar
         ref={calendarRef}
         plugins={[timeGridPlugin, interactionPlugin]}
