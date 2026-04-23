@@ -205,16 +205,135 @@ export function MobileTimeline({ currentDate, onDateChange }: MobileTimelineProp
     setQuickViewItem(undefined);
   }, [quickViewItem]);
 
-  const handleDayClick = useCallback((day: Date, hour: number) => {
+  /**
+   * Long-press + drag interaction for creating new events.
+   *
+   * Why long-press? A quick tap on an empty slot shouldn't surprise-create an
+   * event — too easy to hit while scrolling. Instead the user has to press
+   * and hold for ~400ms. Once the press is "armed", a one-hour ghost block
+   * appears at finger position and follows the finger vertically (snapped to
+   * 15-min slots) until release. Release opens the normal event-create
+   * dialog with the chosen start time prefilled and the title defaulting to
+   * "Block". Tapping an existing event still goes through handleEventClick
+   * (separate onClick on the event div with stopPropagation).
+   *
+   * State:
+   *   previewState == null           → no interaction in progress
+   *   previewState.armed === false   → finger down, waiting for the 400ms threshold
+   *   previewState.armed === true    → ghost block visible, following finger
+   */
+  interface PreviewState {
+    day: Date;
+    dayIndex: number;
+    startHour: number;      // originally-touched hour (snapped to 15min)
+    currentHour: number;    // live hour while dragging
+    armed: boolean;
+    startClientY: number;
+    columnTop: number;      // viewport y of the day column top
+  }
+  const [preview, setPreview] = useState<PreviewState | null>(null);
+  const longPressTimer = useRef<number | null>(null);
+
+  const SNAP_MIN = 15;
+  const PRESS_MS = 400;
+  const CANCEL_MOVE_PX = 10; // finger travel before arming cancels the press
+
+  const snapQuarterHour = (hour: number) => {
+    const slot = SNAP_MIN / 60;
+    return Math.round(hour / slot) * slot;
+  };
+
+  const openCreateModal = useCallback((day: Date, hour: number) => {
+    const snapped = snapQuarterHour(hour);
     const start = new Date(day);
-    start.setHours(Math.floor(hour), (hour % 1) * 60, 0, 0);
+    start.setHours(Math.floor(snapped), Math.round((snapped % 1) * 60), 0, 0);
     const end = new Date(start);
     end.setHours(start.getHours() + 1);
     setSelectedDate(start);
     setSelectedEndDate(end);
-    setSelectedEvent({ allDay: false });
+    // Default title "Block" so users who don't type anything still get a
+    // sensible label rather than "(No title)".
+    setSelectedEvent({ allDay: false, title: "Block" } as Partial<CalendarEvent>);
     setIsEventModalOpen(true);
   }, []);
+
+  const clearLongPressTimer = () => {
+    if (longPressTimer.current !== null) {
+      window.clearTimeout(longPressTimer.current);
+      longPressTimer.current = null;
+    }
+  };
+
+  const yToHour = (clientY: number, columnTop: number): number => {
+    const scrollTop = scrollContainerRef.current?.scrollTop ?? 0;
+    return (clientY - columnTop + scrollTop) / HOUR_HEIGHT;
+  };
+
+  const handleColumnTouchStart = (day: Date, dayIndex: number) => (e: React.TouchEvent<HTMLDivElement>) => {
+    // Do nothing if the touch started on an event tile — the event's own
+    // onClick handles edit and already stopPropagations.
+    const target = e.target as HTMLElement;
+    if (target.closest("[data-event-tile]")) return;
+
+    const touch = e.touches[0];
+    const rect = e.currentTarget.getBoundingClientRect();
+    const hour = yToHour(touch.clientY, rect.top);
+
+    clearLongPressTimer();
+    longPressTimer.current = window.setTimeout(() => {
+      setPreview({
+        day,
+        dayIndex,
+        startHour: snapQuarterHour(hour),
+        currentHour: snapQuarterHour(hour),
+        armed: true,
+        startClientY: touch.clientY,
+        columnTop: rect.top,
+      });
+      longPressTimer.current = null;
+    }, PRESS_MS);
+
+    // Stash a non-armed preview so touchmove can check for cancel-travel.
+    setPreview({
+      day,
+      dayIndex,
+      startHour: snapQuarterHour(hour),
+      currentHour: snapQuarterHour(hour),
+      armed: false,
+      startClientY: touch.clientY,
+      columnTop: rect.top,
+    });
+  };
+
+  const handleColumnTouchMove = (e: React.TouchEvent<HTMLDivElement>) => {
+    if (!preview) return;
+    const touch = e.touches[0];
+    if (!preview.armed) {
+      // Before the long-press fires: treat any travel as a scroll, back off.
+      if (Math.abs(touch.clientY - preview.startClientY) > CANCEL_MOVE_PX) {
+        clearLongPressTimer();
+        setPreview(null);
+      }
+      return;
+    }
+    // Armed: drag the ghost. Prevent the scroller from eating the move.
+    e.preventDefault();
+    const hour = yToHour(touch.clientY, preview.columnTop);
+    setPreview({ ...preview, currentHour: snapQuarterHour(hour) });
+  };
+
+  const handleColumnTouchEnd = () => {
+    clearLongPressTimer();
+    if (preview?.armed) {
+      openCreateModal(preview.day, preview.currentHour);
+    }
+    setPreview(null);
+  };
+
+  const handleColumnTouchCancel = () => {
+    clearLongPressTimer();
+    setPreview(null);
+  };
 
   const handleEventModalClose = useCallback(() => {
     setIsEventModalOpen(false);
@@ -540,22 +659,26 @@ export function MobileTimeline({ currentDate, onDateChange }: MobileTimelineProp
           </div>
 
           {/* Day columns */}
-          {days.map((day) => {
+          {days.map((day, dayIndex) => {
             const key = day.toISOString().slice(0, 10);
             const dayEvents = (eventsByDay.get(key) || []).filter((e) => !e.isAllDay);
+            const isPreviewColumn = preview?.armed && preview.dayIndex === dayIndex;
 
             return (
               <div
                 key={key}
-                className={`relative flex-none border-r border-border/20 ${isToday(day) ? "bg-primary/5" : ""} cursor-pointer`}
-                style={{ width: `${DAY_WIDTH_VW}vw`, height: gridHeight }}
-                onClick={(e) => {
-                  const rect = e.currentTarget.getBoundingClientRect();
-                  const y = e.clientY - rect.top;
-                  const scrollTop = scrollContainerRef.current?.scrollTop || 0;
-                  const hour = (y + scrollTop) / HOUR_HEIGHT;
-                  handleDayClick(day, hour);
+                className={`relative flex-none border-r border-border/20 ${isToday(day) ? "bg-primary/5" : ""}`}
+                style={{
+                  width: `${DAY_WIDTH_VW}vw`,
+                  height: gridHeight,
+                  // While armed, stop the scroller from hijacking the finger so
+                  // the ghost block follows the drag.
+                  touchAction: isPreviewColumn ? "none" : undefined,
                 }}
+                onTouchStart={handleColumnTouchStart(day, dayIndex)}
+                onTouchMove={handleColumnTouchMove}
+                onTouchEnd={handleColumnTouchEnd}
+                onTouchCancel={handleColumnTouchCancel}
               >
                 {HOURS.map((hour) => (
                   <div
@@ -567,9 +690,33 @@ export function MobileTimeline({ currentDate, onDateChange }: MobileTimelineProp
                   />
                 ))}
 
+                {/* Long-press create preview: 1h ghost block at the current
+                    drag position. Rendered on top of the grid (z-20) but below
+                    the real events so the user still sees conflicts. */}
+                {isPreviewColumn && preview && (
+                  <div
+                    className="pointer-events-none absolute left-0.5 right-0.5 rounded-lg border-2 border-dashed border-primary bg-primary/20 px-1 py-0.5 text-[10px] leading-tight text-primary-foreground z-20"
+                    style={{
+                      top: preview.currentHour * HOUR_HEIGHT,
+                      height: HOUR_HEIGHT,
+                    }}
+                  >
+                    <div className="font-medium">Block</div>
+                    <div className="text-[9px] opacity-80">
+                      {formatHour(Math.floor(preview.currentHour))}
+                      {preview.currentHour % 1 !== 0 ? `:${Math.round((preview.currentHour % 1) * 60).toString().padStart(2, "0")}` : ""}
+                    </div>
+                  </div>
+                )}
+
                 {dayEvents.map((pe) => (
                   <div
                     key={pe.event.id}
+                    // data-event-tile lets the column's touchStart handler
+                    // know to bail out — without this marker a long-press
+                    // that started on the event would also arm a new-event
+                    // preview underneath.
+                    data-event-tile="true"
                     // left/width come from assignLanes(); the fixed 2px inset
                     // on each side keeps events from touching the column
                     // borders even when they span the full lane.
