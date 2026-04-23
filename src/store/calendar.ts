@@ -168,9 +168,8 @@ export const useCalendarStore = create<CalendarStore>()((set, get) => ({
         eventEnd = normalizeAllDayDate(eventEnd);
       }
 
-      // If it's a non-recurring event or an instance, add it directly
-      if (!event.isRecurring || !event.isMaster) {
-        // Check if the event overlaps with the date range
+      // Instances of a recurring master are added directly (the master expansion handles other occurrences)
+      if (event.masterEventId) {
         if (eventStart <= end && eventEnd >= start) {
           expandedEvents.push({
             ...event,
@@ -181,11 +180,24 @@ export const useCalendarStore = create<CalendarStore>()((set, get) => ({
         return;
       }
 
-      // For master events, expand the recurrence
-      if (expandInstances && event.isMaster && event.recurrenceRule) {
+      // Non-recurring events without a rule are added directly
+      if (!event.isRecurring || !event.recurrenceRule) {
+        if (eventStart <= end && eventEnd >= start) {
+          expandedEvents.push({
+            ...event,
+            start: eventStart,
+            end: eventEnd,
+          });
+        }
+        return;
+      }
+
+      // Recurring event with a rule: expand when requested
+      if (expandInstances) {
         try {
-          // Parse the recurrence rule
-          const rule = RRule.fromString(event.recurrenceRule);
+          // Parse the recurrence rule and anchor it to the event's start
+          const ruleOptions = RRule.parseString(event.recurrenceRule);
+          const rule = new RRule({ ...ruleOptions, dtstart: eventStart });
 
           // Calculate event duration in milliseconds
           const duration = eventEnd.getTime() - eventStart.getTime();
