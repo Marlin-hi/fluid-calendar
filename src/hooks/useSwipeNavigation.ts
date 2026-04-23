@@ -31,34 +31,38 @@ export function useSwipeNavigation(
         return;
       }
 
-      // Slide out completely in swipe direction
-      const slideOut = direction === "left"
-        ? -container.offsetWidth
-        : container.offsetWidth;
+      const distance =
+        direction === "left"
+          ? -container.offsetWidth * 0.25
+          : container.offsetWidth * 0.25;
 
-      grid.style.transition = "transform 0.2s ease-out";
-      grid.style.transform = `translateX(${slideOut}px)`;
+      grid.style.transition =
+        "transform 0.2s ease-out, opacity 0.2s ease-out";
+      grid.style.transform = `translateX(${distance}px)`;
+      grid.style.opacity = "0.2";
 
       setTimeout(() => {
-        // Jump to opposite side (no transition)
         grid.style.transition = "none";
-        grid.style.transform = `translateX(${-slideOut}px)`;
+        grid.style.transform = `translateX(${-distance}px)`;
+        grid.style.opacity = "0.2";
 
         callback();
 
-        // Slide in from opposite side
         requestAnimationFrame(() => {
           requestAnimationFrame(() => {
-            grid.style.transition = "transform 0.2s ease-out";
+            grid.style.transition =
+              "transform 0.25s ease-out, opacity 0.25s ease-out";
             grid.style.transform = "translateX(0)";
+            grid.style.opacity = "1";
 
             setTimeout(() => {
               grid.style.transition = "";
               grid.style.transform = "";
-            }, 220);
+              grid.style.opacity = "";
+            }, 280);
           });
         });
-      }, 200);
+      }, 220);
     },
     [containerRef]
   );
@@ -101,8 +105,10 @@ export function useSwipeNavigation(
 
       const g = grid();
       if (g) {
+        const dampened = dx * 0.35;
         g.style.transition = "none";
-        g.style.transform = `translateX(${dx}px)`;
+        g.style.transform = `translateX(${dampened}px)`;
+        g.style.opacity = `${Math.max(0.4, 1 - Math.abs(dx) / 500)}`;
       }
     };
 
@@ -115,6 +121,7 @@ export function useSwipeNavigation(
         if (g) {
           g.style.transition = "";
           g.style.transform = "";
+          g.style.opacity = "";
         }
         return;
       }
@@ -133,11 +140,14 @@ export function useSwipeNavigation(
       } else {
         const g = grid();
         if (g) {
-          g.style.transition = "transform 0.2s ease-out";
+          g.style.transition =
+            "transform 0.2s ease-out, opacity 0.2s ease-out";
           g.style.transform = "translateX(0)";
+          g.style.opacity = "1";
           setTimeout(() => {
             g.style.transition = "";
             g.style.transform = "";
+            g.style.opacity = "";
           }, 220);
         }
       }
