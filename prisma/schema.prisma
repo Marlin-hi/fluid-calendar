@@ -85,6 +85,21 @@ model User {
   taskProviders        TaskProvider[]
   TaskChange           TaskChange[]
   PasswordReset        PasswordReset[]
+  apiTokens            ApiToken[]
+}
+
+model ApiToken {
+  id         String    @id @default(cuid())
+  tokenHash  String    @unique
+  prefix     String
+  name       String
+  userId     String
+  user       User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  lastUsedAt DateTime?
+  revokedAt  DateTime?
+  createdAt  DateTime  @default(now())
+
+  @@index([userId])
 }
 
 model VerificationToken {
