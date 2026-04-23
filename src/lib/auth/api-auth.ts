@@ -1,9 +1,45 @@
+import { createHash } from "crypto";
+
 import { getToken } from "next-auth/jwt";
 import { NextRequest, NextResponse } from "next/server";
 
 import { logger } from "@/lib/logger";
+import { prisma } from "@/lib/prisma";
 
 const LOG_SOURCE = "APIAuth";
+
+function hashApiToken(token: string): string {
+  return createHash("sha256").update(token).digest("hex");
+}
+
+async function authenticateBearer(
+  request: NextRequest,
+  logSource: string
+): Promise<string | null> {
+  const header = request.headers.get("authorization");
+  if (!header || !header.toLowerCase().startsWith("bearer ")) return null;
+  const raw = header.slice(7).trim();
+  if (!raw.startsWith("fct_")) return null;
+
+  const tokenHash = hashApiToken(raw);
+  const apiToken = await prisma.apiToken.findUnique({
+    where: { tokenHash },
+    select: { id: true, userId: true, revokedAt: true },
+  });
+  if (!apiToken || apiToken.revokedAt) return null;
+
+  prisma.apiToken
+    .update({ where: { id: apiToken.id }, data: { lastUsedAt: new Date() } })
+    .catch((error) => {
+      logger.warn(
+        "Failed to update apiToken.lastUsedAt",
+        { error: error instanceof Error ? error.message : "Unknown error" },
+        logSource
+      );
+    });
+
+  return apiToken.userId;
+}
 
 /**
  * Authenticates a request and returns the user ID if authenticated
@@ -15,6 +51,9 @@ export async function authenticateRequest(
   request: NextRequest,
   logSource: string
 ) {
+  const bearerUserId = await authenticateBearer(request, logSource);
+  if (bearerUserId) return { userId: bearerUserId };
+
   // Get the user token from the request
   const token = await getToken({
     req: request,
