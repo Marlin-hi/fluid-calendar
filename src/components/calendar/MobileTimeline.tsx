@@ -223,13 +223,17 @@ export function MobileTimeline({ currentDate, onDateChange }: MobileTimelineProp
    *   previewState.armed === true    → ghost block visible, following finger
    */
   interface PreviewState {
+    /** Day the press originally started on — kept so we can compute a
+     *  useful snap-back if the user drags the ghost clear off-screen. */
     day: Date;
+    /** Index into `days` where the ghost currently lives. Updated on
+     *  touchmove while armed so the ghost can slide across day columns. */
     dayIndex: number;
     startHour: number;      // originally-touched hour (snapped to 15min)
     currentHour: number;    // live hour while dragging
     armed: boolean;
     startClientY: number;
-    columnTop: number;      // viewport y of the day column top
+    columnTop: number;      // viewport y of the original day column top
   }
   const [preview, setPreview] = useState<PreviewState | null>(null);
   const longPressTimer = useRef<number | null>(null);
@@ -337,15 +341,38 @@ export function MobileTimeline({ currentDate, onDateChange }: MobileTimelineProp
     }
     // Armed: drag the ghost. Prevent the scroller from eating the move.
     e.preventDefault();
+
+    // Vertical → hour. Uses the original column's top because the other
+    // columns share the same y-axis — they're just translated horizontally.
     const hour = yToHour(touch.clientY, preview.columnTop);
-    setPreview({ ...preview, currentHour: snapQuarterHour(hour) });
+
+    // Horizontal → which day. Look up the element under the finger and
+    // read its data-day-index. Falling back to the previous value means
+    // the ghost doesn't snap to day 0 if the finger strays over the
+    // time-axis or the header.
+    let newDayIndex = preview.dayIndex;
+    const elUnder = document.elementFromPoint(touch.clientX, touch.clientY) as HTMLElement | null;
+    const dayEl = elUnder?.closest("[data-day-index]") as HTMLElement | null;
+    if (dayEl) {
+      const parsed = Number(dayEl.getAttribute("data-day-index"));
+      if (Number.isInteger(parsed)) newDayIndex = parsed;
+    }
+
+    setPreview({
+      ...preview,
+      currentHour: snapQuarterHour(hour),
+      dayIndex: newDayIndex,
+    });
   };
 
   const handleColumnTouchEnd = () => {
     clearLongPressTimer();
     if (preview?.armed) {
-      // Long-press released → create (even if start was on an existing event).
-      openCreateModal(preview.day, preview.currentHour);
+      // Long-press released → create at the ghost's final position. Use
+      // days[dayIndex] rather than the originally-touched `day` so a
+      // horizontal drag onto a neighbouring day column is respected.
+      const finalDay = days[preview.dayIndex] ?? preview.day;
+      openCreateModal(finalDay, preview.currentHour);
     } else if (touchedEvent.current) {
       // Short tap on an event tile → open its QuickView.
       handleEventClick(touchedEvent.current.event, touchedEvent.current.el);
@@ -721,6 +748,7 @@ export function MobileTimeline({ currentDate, onDateChange }: MobileTimelineProp
             return (
               <div
                 key={key}
+                data-day-index={dayIndex}
                 className={`relative flex-none border-r border-border/20 ${isToday(day) ? "bg-primary/5" : ""}`}
                 style={{
                   width: `${DAY_WIDTH_VW}vw`,
