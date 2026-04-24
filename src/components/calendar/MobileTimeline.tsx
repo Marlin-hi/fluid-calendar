@@ -738,7 +738,7 @@ export function MobileTimeline({ currentDate, onDateChange }: MobileTimelineProp
       >
         <div className="relative flex" style={{ width: totalWidth, height: gridHeight }}>
           {/* Time axis */}
-          <div className="sticky left-0 z-10 w-12 flex-none backdrop-blur-xl bg-background/85">
+          <div className="sticky left-0 z-30 w-12 flex-none backdrop-blur-xl bg-background/85">
             {HOURS.map((hour) => (
               <div
                 key={hour}
