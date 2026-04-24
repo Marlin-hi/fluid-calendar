@@ -172,7 +172,19 @@ function getThemeForHour(hour: number) {
 }
 
 export function TimeThemeProvider({ children }: { children: React.ReactNode }) {
-  const [theme, setTheme] = useState(() => getThemeForHour(new Date().getHours()));
+  // Do NOT pick the theme in the initializer. "use client" components still
+  // render once on the server, where new Date().getHours() returns the UTC
+  // hour — on a +02:00 client this is usually off by two hours, and when
+  // the server's hour and client's hour land in different theme buckets
+  // (e.g. server=08 morning, client=10 midday), React hydrates with the
+  // server markup first and then corrects to the client value, producing a
+  // visible theme flicker that alternates between page loads depending on
+  // which render the browser commits first.
+  //
+  // Start at `null` → server emits the bare children with no theme classes
+  // / background; client mounts and sets the real theme in the effect
+  // below. Both sides agree on null → no hydration mismatch, no flicker.
+  const [theme, setTheme] = useState<(typeof themes)[number] | null>(null);
 
   useEffect(() => {
     const update = () => setTheme(getThemeForHour(new Date().getHours()));
@@ -182,6 +194,7 @@ export function TimeThemeProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   useEffect(() => {
+    if (!theme) return;
     const root = document.documentElement;
     Object.entries(theme.vars).forEach(([key, value]) => {
       root.style.setProperty(key, value);
@@ -191,16 +204,20 @@ export function TimeThemeProvider({ children }: { children: React.ReactNode }) {
 
   return (
     <>
-      {/* Background image layer */}
-      <div
-        className="fixed inset-0 -z-20 bg-cover bg-center bg-no-repeat transition-opacity duration-[3000ms]"
-        style={{ backgroundImage: `url(${theme.bg})` }}
-      />
-      {/* Overlay layer */}
-      <div
-        className="fixed inset-0 -z-10 transition-all duration-[3000ms]"
-        style={{ background: theme.vars["--tt-overlay"] }}
-      />
+      {theme && (
+        <>
+          {/* Background image layer */}
+          <div
+            className="fixed inset-0 -z-20 bg-cover bg-center bg-no-repeat transition-opacity duration-[3000ms]"
+            style={{ backgroundImage: `url(${theme.bg})` }}
+          />
+          {/* Overlay layer */}
+          <div
+            className="fixed inset-0 -z-10 transition-all duration-[3000ms]"
+            style={{ background: theme.vars["--tt-overlay"] }}
+          />
+        </>
+      )}
       {children}
     </>
   );
