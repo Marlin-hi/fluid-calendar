@@ -131,6 +131,52 @@ export async function getAllEvents<T = unknown>(): Promise<T[]> {
   });
 }
 
+/**
+ * Drop events whose time range falls entirely outside the cache window.
+ * Pending rows and reserved sentinel ids (starting with `__`) are kept.
+ * Returns the number of rows removed.
+ */
+export async function pruneEventsOutsideWindow(
+  now: Date,
+  daysBack: number,
+  daysForward: number
+): Promise<number> {
+  if (!isIdbAvailable()) return 0;
+  const lo = now.getTime() - daysBack * 86_400_000;
+  const hi = now.getTime() + daysForward * 86_400_000;
+  return new Promise<number>((resolve, reject) => {
+    openDb().then((db) => {
+      const tx = db.transaction(STORE_EVENTS, "readwrite");
+      const os = tx.objectStore(STORE_EVENTS);
+      const getReq = os.getAll();
+      let removed = 0;
+      getReq.onsuccess = () => {
+        const rows = (getReq.result ?? []) as Array<{
+          id: string;
+          start?: string;
+          end?: string;
+          _pending?: boolean;
+        }>;
+        for (const row of rows) {
+          if (typeof row.id === "string" && row.id.startsWith("__")) continue;
+          if (row._pending) continue;
+          if (!row.start || !row.end) continue;
+          const startMs = Date.parse(row.start);
+          const endMs = Date.parse(row.end);
+          if (Number.isFinite(startMs) && Number.isFinite(endMs)) {
+            if (endMs < lo || startMs > hi) {
+              os.delete(row.id);
+              removed++;
+            }
+          }
+        }
+      };
+      tx.oncomplete = () => resolve(removed);
+      tx.onerror = () => reject(tx.error);
+    }, reject);
+  });
+}
+
 export async function deleteEvent(id: string): Promise<void> {
   if (!isIdbAvailable()) return;
   await txn(STORE_EVENTS, "readwrite", (os) => os.delete(id));

@@ -34,11 +34,20 @@ import {
   deleteEvent,
   getAllEvents,
   isIdbAvailable,
+  pruneEventsOutsideWindow,
   putEvents,
   queueWrite,
   upsertEvent,
 } from "./db";
 import { isOfflineEnabled } from "./settings";
+
+/** Window we keep hydrated in IDB. Anything older than 30 days or more
+ *  than 180 days in the future gets pruned on the next delta-sync so
+ *  the local store doesn't grow without bound on a busy calendar.
+ *  When the user navigates outside this window in the UI, a subsequent
+ *  full-fetch (cursor cleared on app launch) repopulates it. */
+const CACHE_DAYS_BACK = 30;
+const CACHE_DAYS_FORWARD = 180;
 
 type FetchArgs = Parameters<typeof fetch>;
 const ORIGINAL_KEY = "__fcOriginalFetch__" as const;
@@ -345,6 +354,13 @@ export function installOfflineFetchPatch(): void {
             // saved in the same ms as the query.
             const newCursor = res.headers.get("X-Sync-Ts");
             if (newCursor) await setSyncCursor(newCursor).catch(() => {});
+            // Trim events outside the sliding cache window. Pending rows
+            // and sentinels are preserved by the helper.
+            await pruneEventsOutsideWindow(
+              new Date(),
+              CACHE_DAYS_BACK,
+              CACHE_DAYS_FORWARD
+            ).catch(() => {});
 
             // Always return the full picture to the caller, not just the
             // delta — the calendar store overwrites its state with the
