@@ -272,11 +272,22 @@ export function MobileTimeline({ currentDate, onDateChange }: MobileTimelineProp
     return (clientY - columnTop) / HOUR_HEIGHT;
   };
 
+  // If the touch started on an event tile, remember it — a short tap will
+  // open that event's QuickView, a long-press creates a ghost at the same
+  // position (same behaviour as the empty grid). This lets the user create
+  // a conflicting event by long-pressing an occupied slot.
+  const touchedEvent = useRef<{ event: CalendarEvent; el: HTMLElement } | null>(null);
+
   const handleColumnTouchStart = (day: Date, dayIndex: number) => (e: React.TouchEvent<HTMLDivElement>) => {
-    // Do nothing if the touch started on an event tile — the event's own
-    // onClick handles edit and already stopPropagations.
     const target = e.target as HTMLElement;
-    if (target.closest("[data-event-tile]")) return;
+    const tile = target.closest("[data-event-tile]") as HTMLElement | null;
+    if (tile) {
+      const id = tile.getAttribute("data-event-id");
+      const ev = id ? allItems.find((x) => x.id === id) : undefined;
+      touchedEvent.current = ev ? { event: ev, el: tile } : null;
+    } else {
+      touchedEvent.current = null;
+    }
 
     const touch = e.touches[0];
     const rect = e.currentTarget.getBoundingClientRect();
@@ -328,13 +339,19 @@ export function MobileTimeline({ currentDate, onDateChange }: MobileTimelineProp
   const handleColumnTouchEnd = () => {
     clearLongPressTimer();
     if (preview?.armed) {
+      // Long-press released → create (even if start was on an existing event).
       openCreateModal(preview.day, preview.currentHour);
+    } else if (touchedEvent.current) {
+      // Short tap on an event tile → open its QuickView.
+      handleEventClick(touchedEvent.current.event, touchedEvent.current.el);
     }
+    touchedEvent.current = null;
     setPreview(null);
   };
 
   const handleColumnTouchCancel = () => {
     clearLongPressTimer();
+    touchedEvent.current = null;
     setPreview(null);
   };
 
@@ -749,11 +766,14 @@ export function MobileTimeline({ currentDate, onDateChange }: MobileTimelineProp
                 {dayEvents.map((pe) => (
                   <div
                     key={pe.event.id}
-                    // data-event-tile lets the column's touchStart handler
-                    // know to bail out — without this marker a long-press
-                    // that started on the event would also arm a new-event
-                    // preview underneath.
+                    // data-event-tile + data-event-id let the column's
+                    // touchStart/End handler route short taps to edit and
+                    // long-presses to create (even on top of an event). All
+                    // interaction goes through the column's touch handlers —
+                    // no onClick here so click and long-press don't both fire
+                    // at the end of the same gesture.
                     data-event-tile="true"
+                    data-event-id={pe.event.id}
                     // left/width come from assignLanes(); the fixed 2px inset
                     // on each side keeps events from touching the column
                     // borders even when they span the full lane.
@@ -766,10 +786,6 @@ export function MobileTimeline({ currentDate, onDateChange }: MobileTimelineProp
                       zIndex: pe.zIndex,
                       backgroundColor: hexToGlass(pe.color, 0.55),
                       backdropFilter: "blur(8px)",
-                    }}
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      handleEventClick(pe.event, e.currentTarget);
                     }}
                   >
                     <div className="font-medium truncate">{pe.event.title}</div>
