@@ -24,6 +24,7 @@ import {
 import { useTaskStore } from "@/store/task";
 
 import { CalendarEvent, CalendarFeed } from "@/types/calendar";
+import { useOfflineStatus } from "@/hooks/useOfflineStatus";
 import { usePanOnRightClick } from "@/hooks/usePanOnRightClick";
 import { useSwipeNavigation } from "@/hooks/useSwipeNavigation";
 
@@ -78,6 +79,7 @@ export function Calendar({
   const { scheduleAllTasks } = useTaskStore();
   const { setFeeds, setEvents } = useCalendarStore();
   const calendarGridRef = useRef<HTMLDivElement>(null);
+  const { offlineEnabled, online, pendingCount } = useOfflineStatus();
   usePanOnRightClick(calendarGridRef);
 
   const [isMobile, setIsMobile] = useState(false);
@@ -264,6 +266,39 @@ export function Calendar({
               <HiLightningBolt className="h-4 w-4" />
               <span className="hidden md:inline">Auto Schedule</span>
             </button>
+
+            {/* Offline status pill: shows only when the feature flag is on.
+             *  Colour-codes the two useful signals — offline-without-pending
+             *  (amber), offline-with-pending (amber + count), online-with-
+             *  pending-draining (blue + count). When online and nothing is
+             *  queued the pill stays hidden to keep the header quiet. */}
+            {offlineEnabled && (online === false || pendingCount > 0) && (
+              <a
+                href="/settings#offline"
+                className={cn(
+                  "flex flex-shrink-0 items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-semibold md:text-xs",
+                  online
+                    ? "bg-blue-500/15 text-blue-500"
+                    : "bg-amber-500/15 text-amber-600"
+                )}
+                title={
+                  online
+                    ? `${pendingCount} offline-Aenderung(en) werden gerade synchronisiert`
+                    : `Offline${pendingCount > 0 ? ` mit ${pendingCount} noch nicht synchronisierten Aenderung(en)` : ""}`
+                }
+              >
+                <span
+                  className={cn(
+                    "h-1.5 w-1.5 rounded-full",
+                    online ? "bg-blue-500" : "bg-amber-500"
+                  )}
+                />
+                {online ? "Sync" : "Offline"}
+                {pendingCount > 0 && (
+                  <span className="tabular-nums">· {pendingCount}</span>
+                )}
+              </a>
+            )}
 
             <div className="flex items-center gap-0.5 md:gap-2">
               <button

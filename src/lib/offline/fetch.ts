@@ -62,6 +62,26 @@ function isEventsList(url: string): boolean {
   }
 }
 
+/**
+ * Any endpoint that accepts an event write. `/api/events` is the
+ * LOCAL-calendar path; feeds backed by CalDAV / Google / Outlook hit
+ * their provider-specific equivalents and must also be queued offline.
+ * When the sync worker drains a pending write it re-uses PendingWrite.path
+ * so each entry lands back on the endpoint it was originally aimed at.
+ */
+function isEventWrite(url: string): string | null {
+  try {
+    const u = new URL(url, typeof location === "undefined" ? "http://x" : location.origin);
+    if (u.pathname === "/api/events") return u.pathname;
+    if (/^\/api\/calendar\/(caldav|google|outlook)\/events$/.test(u.pathname)) {
+      return u.pathname;
+    }
+    return null;
+  } catch {
+    return null;
+  }
+}
+
 /** Is this URL the feeds-list endpoint? */
 function isFeedsList(url: string): boolean {
   try {
@@ -108,7 +128,8 @@ function tempId(): string {
  */
 async function handleOfflineWrite(
   method: string,
-  body: Record<string, unknown> | null
+  body: Record<string, unknown> | null,
+  path: string
 ): Promise<Response | null> {
   if (method === "POST" && body) {
     const id = tempId();
@@ -131,7 +152,7 @@ async function handleOfflineWrite(
     await upsertEvent(optimistic);
     await queueWrite({
       op: "create",
-      path: "/api/events",
+      path, // preserve the original write endpoint (LOCAL vs CalDAV vs Google vs Outlook)
       method: "POST",
       body,
       eventId: id,
@@ -149,7 +170,7 @@ async function handleOfflineWrite(
     await upsertEvent(merged);
     await queueWrite({
       op: "update",
-      path: "/api/events",
+      path,
       method: "PATCH",
       body,
       eventId: id,
@@ -169,7 +190,7 @@ async function handleOfflineWrite(
     await deleteEvent(id);
     await queueWrite({
       op: "delete",
-      path: "/api/events",
+      path,
       method: "DELETE",
       body,
       eventId: id,
@@ -266,15 +287,16 @@ export function installOfflineFetchPatch(): void {
     const url = urlOf(input);
     const method = methodOf(input, init);
 
-    // --- Writes on /api/events: hydrate IDB + queue for later sync ---
-    if (isEventsList(url) && (method === "POST" || method === "PATCH" || method === "DELETE")) {
+    // --- Writes on any event endpoint: hydrate IDB + queue for later sync ---
+    const writePath = isEventWrite(url);
+    if (writePath && (method === "POST" || method === "PATCH" || method === "DELETE")) {
       const body = await readJsonBody(init);
       // Fast-path: if the browser reports offline, skip the real fetch
       // entirely. Otherwise the browser spends ~30s on its own connect
       // timeout before our catch-branch fires, which shows up to the
       // user as a long spinner on the Create button.
       if (typeof navigator !== "undefined" && navigator.onLine === false) {
-        const offlineRes = await handleOfflineWrite(method, body);
+        const offlineRes = await handleOfflineWrite(method, body, writePath);
         if (offlineRes) return offlineRes;
         // Unrecognised body — nothing we can cache. Fall through to the
         // real fetch and let it fail as normal.
@@ -302,7 +324,7 @@ export function installOfflineFetchPatch(): void {
         return res;
       } catch (networkErr) {
         // Fetch failed → fall back to the offline-write path.
-        const fallback = await handleOfflineWrite(method, body);
+        const fallback = await handleOfflineWrite(method, body, writePath);
         if (fallback) return fallback;
         throw networkErr;
       }
