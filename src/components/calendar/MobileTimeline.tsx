@@ -323,10 +323,15 @@ export function MobileTimeline({ currentDate, onDateChange }: MobileTimelineProp
     if (!preview) return;
     const touch = e.touches[0];
     if (!preview.armed) {
-      // Before the long-press fires: treat any travel as a scroll, back off.
+      // Before the long-press fires: treat any travel as a scroll, back
+      // off. Crucially we also drop the remembered event tile, otherwise
+      // touchEnd would still fire the tap-to-edit flow once the finger
+      // lifts — a bare scroll that started on an event tile would then
+      // surprise-open its QuickView.
       if (Math.abs(touch.clientY - preview.startClientY) > CANCEL_MOVE_PX) {
         clearLongPressTimer();
         setPreview(null);
+        touchedEvent.current = null;
       }
       return;
     }
