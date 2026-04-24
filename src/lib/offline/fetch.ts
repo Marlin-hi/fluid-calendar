@@ -379,9 +379,22 @@ export function installOfflineFetchPatch(): void {
         if (isEventsList(url)) {
           const delta = (await res.clone().json()) as Array<{ id: string }>;
           if (Array.isArray(delta)) {
-            // Upsert the delta rows into IDB (keep untouched rows intact
-            // on a server-side delta fetch). If we did a full fetch (no
-            // cursor), the delta IS the whole dataset.
+            // When we did a FULL fetch (no cursor), the server's response
+            // is the complete dataset — any id in IDB that isn't in the
+            // response has been deleted server-side (or, in Marlin's
+            // prod→dev clone case, never existed for this user). Purge
+            // those before upserting so stale rows don't ghost-flicker
+            // on every reload.
+            if (!usedCursor) {
+              const realIds = new Set(delta.map((e) => e.id));
+              const existing = await getCachedEvents();
+              for (const row of existing as Array<{ id: string; _pending?: boolean }>) {
+                if (row._pending) continue;
+                if (!realIds.has(row.id)) {
+                  await deleteEvent(row.id).catch(() => {});
+                }
+              }
+            }
             if (delta.length > 0) await putEvents(delta).catch(() => {});
             // Store the server's X-Sync-Ts as the cursor for next time —
             // NOT max(updatedAt) from the rows, which would miss writes
