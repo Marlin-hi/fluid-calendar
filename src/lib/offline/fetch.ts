@@ -134,7 +134,7 @@ async function handleOfflineWrite(
   }
   if (method === "PATCH" && body?.id) {
     const id = String(body.id);
-    const all = await getAllEvents<{ id: string }>();
+    const all = await getAllEvents<{ id: string; updatedAt?: string }>();
     const existing = all.find((e) => e.id === id) ?? { id };
     const merged = { ...existing, ...body, _pending: true as const };
     await upsertEvent(merged);
@@ -144,6 +144,9 @@ async function handleOfflineWrite(
       method: "PATCH",
       body,
       eventId: id,
+      // Snapshot the server version so the sync worker can send it as
+      // If-Match and the server can detect concurrent edits.
+      ifMatch: existing.updatedAt,
     });
     if (typeof window !== "undefined") {
       window.dispatchEvent(new CustomEvent("fc:pending-changed"));
@@ -152,6 +155,8 @@ async function handleOfflineWrite(
   }
   if (method === "DELETE" && body?.id) {
     const id = String(body.id);
+    const all = await getAllEvents<{ id: string; updatedAt?: string }>();
+    const existing = all.find((e) => e.id === id);
     await deleteEvent(id);
     await queueWrite({
       op: "delete",
@@ -159,6 +164,7 @@ async function handleOfflineWrite(
       method: "DELETE",
       body,
       eventId: id,
+      ifMatch: existing?.updatedAt,
     });
     if (typeof window !== "undefined") {
       window.dispatchEvent(new CustomEvent("fc:pending-changed"));
@@ -196,6 +202,25 @@ async function getCachedFeedMeta(feedId: string): Promise<{ name?: string; color
 /** Feeds cache lives in IDB too, under the events store keyed by a sentinel id.
  *  Keeps the code path simple — we don't need a second store for five-ish rows. */
 const FEEDS_CACHE_ID = "__fc_feeds_cache__";
+/** Incremental-sync cursor (ISO timestamp from the server's X-Sync-Ts). */
+const SYNC_CURSOR_ID = "__fc_sync_cursor__";
+
+async function getSyncCursor(): Promise<string | null> {
+  const all = await getAllEvents<{ id: string; lastSyncTs?: string }>();
+  const record = all.find((r) => r.id === SYNC_CURSOR_ID);
+  return record?.lastSyncTs ?? null;
+}
+
+async function setSyncCursor(ts: string): Promise<void> {
+  await upsertEvent({ id: SYNC_CURSOR_ID, lastSyncTs: ts });
+}
+
+/** Reserved sentinel ids that live in the events store for bookkeeping
+ *  (feeds cache, sync cursor). Filter these out when returning events
+ *  to callers — they're never real calendar rows. */
+function isSentinel(id: string): boolean {
+  return id === FEEDS_CACHE_ID || id === SYNC_CURSOR_ID;
+}
 
 async function cacheFeeds(feeds: unknown): Promise<void> {
   if (!Array.isArray(feeds)) return;
@@ -210,7 +235,7 @@ async function getCachedFeeds(): Promise<unknown[]> {
 
 async function getCachedEvents(): Promise<unknown[]> {
   const all = await getAllEvents<{ id: string }>();
-  return all.filter((e) => e.id !== FEEDS_CACHE_ID);
+  return all.filter((e) => !isSentinel(e.id));
 }
 
 export function installOfflineFetchPatch(): void {
@@ -286,26 +311,47 @@ export function installOfflineFetchPatch(): void {
           /* fall through to the normal fetch + catch */
         }
       }
+      // Incremental sync: if we already have a cursor, append ?since=<ts>
+      // so the server only returns deltas. The first call of the session
+      // (empty IDB → no cursor) falls through as a full fetch.
+      let fetchArgs: FetchArgs = args;
+      let usedCursor: string | null = null;
+      if (isEventsList(url)) {
+        usedCursor = await getSyncCursor().catch(() => null);
+        if (usedCursor) {
+          try {
+            const u = new URL(url, location.origin);
+            u.searchParams.set("since", usedCursor);
+            fetchArgs = [u.toString(), init];
+          } catch {
+            /* URL parse failed — fall back to full fetch */
+          }
+        }
+      }
+
       try {
-        const res = await original(...args);
+        const res = await original(...fetchArgs);
         if (!res.ok) return res;
 
         if (isEventsList(url)) {
-          // Parse the real response, mirror it into IDB, but merge in any
-          // locally-created events that haven't synced yet so the UI keeps
-          // showing them. After the sync worker drains the queue the next
-          // GET already has the real rows and the `_pending` ones drop out
-          // naturally.
-          const real = (await res.clone().json()) as Array<{ id: string }>;
-          if (Array.isArray(real)) {
-            putEvents(real).catch(() => {});
-            const all = await getCachedEvents();
-            const pending = all.filter(
-              (e) => (e as { _pending?: boolean })._pending === true
-            );
-            if (pending.length > 0) {
-              return jsonResponse([...real, ...pending]);
-            }
+          const delta = (await res.clone().json()) as Array<{ id: string }>;
+          if (Array.isArray(delta)) {
+            // Upsert the delta rows into IDB (keep untouched rows intact
+            // on a server-side delta fetch). If we did a full fetch (no
+            // cursor), the delta IS the whole dataset.
+            if (delta.length > 0) await putEvents(delta).catch(() => {});
+            // Store the server's X-Sync-Ts as the cursor for next time —
+            // NOT max(updatedAt) from the rows, which would miss writes
+            // saved in the same ms as the query.
+            const newCursor = res.headers.get("X-Sync-Ts");
+            if (newCursor) await setSyncCursor(newCursor).catch(() => {});
+
+            // Always return the full picture to the caller, not just the
+            // delta — the calendar store overwrites its state with the
+            // response, so a delta would drop everything that wasn't in
+            // this tick's changes.
+            const everything = await getCachedEvents();
+            return jsonResponse(everything);
           }
           return res;
         }

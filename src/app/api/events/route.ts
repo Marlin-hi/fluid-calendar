@@ -8,6 +8,21 @@ import { prisma } from "@/lib/prisma";
 const LOG_SOURCE = "events-route";
 
 // List all calendar events
+//
+// Supports an incremental-sync query `?since=<iso>`: when present, only
+// events whose updatedAt is strictly greater than `since` are returned.
+// Clients track the highest updatedAt they've seen (the "sync token")
+// and pass it on subsequent polls to avoid re-downloading the whole
+// calendar every time.
+//
+// The response sets an `X-Sync-Ts` header with the server's current
+// timestamp. Clients should store that (not the max(updatedAt) from the
+// rows) as their next `since` — otherwise a row that was saved in the
+// same millisecond as the query would be skipped on the next delta.
+//
+// Deletes aren't yet represented in the delta stream (no tombstone
+// table). Clients should fall back to a full list-fetch periodically —
+// e.g. on app launch — so server-side deletes converge.
 export async function GET(request: NextRequest) {
   try {
     const auth = await authenticateRequest(request, LOG_SOURCE);
@@ -17,14 +32,24 @@ export async function GET(request: NextRequest) {
 
     const userId = auth.userId;
 
-    logger.debug("Fetching events from database...", {}, LOG_SOURCE);
+    const url = new URL(request.url);
+    const sinceParam = url.searchParams.get("since");
+    let sinceDate: Date | null = null;
+    if (sinceParam) {
+      const parsed = new Date(sinceParam);
+      if (!Number.isNaN(parsed.getTime())) sinceDate = parsed;
+    }
 
-    // Get events from feeds that belong to the current user
+    logger.debug(
+      sinceDate ? `Fetching delta since ${sinceDate.toISOString()}` : "Fetching all events",
+      {},
+      LOG_SOURCE
+    );
+
     const events = await prisma.calendarEvent.findMany({
       where: {
-        feed: {
-          userId,
-        },
+        feed: { userId },
+        ...(sinceDate ? { updatedAt: { gt: sinceDate } } : {}),
       },
       include: {
         feed: {
@@ -36,8 +61,14 @@ export async function GET(request: NextRequest) {
       },
     });
 
-    logger.debug(`Found ${events.length} events in database`, {}, LOG_SOURCE);
-    return NextResponse.json(events);
+    logger.debug(`Returning ${events.length} events`, {}, LOG_SOURCE);
+
+    const res = NextResponse.json(events);
+    // The sync cursor for the next poll — use the server's 'now' rather
+    // than the max(updatedAt) to avoid missing rows saved within the
+    // same ms window as this query.
+    res.headers.set("X-Sync-Ts", new Date().toISOString());
+    return res;
   } catch (error) {
     logger.error(
       "Failed to fetch events:",
@@ -118,7 +149,9 @@ export async function POST(request: NextRequest) {
       },
     });
 
-    return NextResponse.json(event);
+    const res = NextResponse.json(event, { status: 201 });
+    res.headers.set("ETag", event.updatedAt.toISOString());
+    return res;
   } catch (error) {
     logger.error(
       "Failed to create calendar event:",
@@ -135,6 +168,12 @@ export async function POST(request: NextRequest) {
 }
 
 // Update an event
+//
+// Optimistic concurrency: if the caller sends `If-Match: <iso-ts>`, we
+// compare it against the current row's updatedAt. A mismatch means
+// someone else changed the event since the client last read it, and we
+// respond 412 Precondition Failed with the current server version so
+// the client can offer a merge UI or apply its last-writer-wins policy.
 export async function PATCH(request: NextRequest) {
   try {
     const auth = await authenticateRequest(request, LOG_SOURCE);
@@ -178,6 +217,14 @@ export async function PATCH(request: NextRequest) {
       );
     }
 
+    const ifMatch = request.headers.get("if-match");
+    if (ifMatch && ifMatch !== existingEvent.updatedAt.toISOString()) {
+      return NextResponse.json(
+        { error: "Precondition failed", current: existingEvent },
+        { status: 412 }
+      );
+    }
+
     const event = await prisma.calendarEvent.update({
       where: { id },
       data: {
@@ -192,7 +239,9 @@ export async function PATCH(request: NextRequest) {
       },
     });
 
-    return NextResponse.json(event);
+    const res = NextResponse.json(event);
+    res.headers.set("ETag", event.updatedAt.toISOString());
+    return res;
   } catch (error) {
     logger.error(
       "Failed to update calendar event:",
@@ -239,6 +288,14 @@ export async function DELETE(request: NextRequest) {
       return NextResponse.json(
         { error: "Event not found or you don't have permission to delete it" },
         { status: 404 }
+      );
+    }
+
+    const ifMatch = request.headers.get("if-match");
+    if (ifMatch && ifMatch !== existingEvent.updatedAt.toISOString()) {
+      return NextResponse.json(
+        { error: "Precondition failed", current: existingEvent },
+        { status: 412 }
       );
     }
 

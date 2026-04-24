@@ -41,6 +41,11 @@ export interface PendingWrite {
   /** optional: the event id this write refers to — lets the UI show a
    *  "pending" badge on that event while it's queued */
   eventId?: string;
+  /** The updatedAt (ISO) the event had when we captured this write. Sent
+   *  as `If-Match` during sync so the server can detect that someone else
+   *  edited the row in the meantime and respond 412. Only meaningful for
+   *  update/delete; absent for create. */
+  ifMatch?: string;
   createdAt: number;
   /** how many sync attempts have failed for this write */
   attempts: number;

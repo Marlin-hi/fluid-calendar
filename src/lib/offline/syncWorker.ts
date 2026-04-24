@@ -53,20 +53,33 @@ export async function syncPendingWrites(): Promise<{ drained: number; remaining:
     const fetch = originalFetch();
     for (const write of queue) {
       try {
-        const res = await fetch(write.path, {
-          method: write.method,
-          headers: { "content-type": "application/json" },
-          body: write.body ? JSON.stringify(write.body) : undefined,
-          credentials: "include",
-        });
+        const res = await sendWrite(fetch, write);
         if (res.ok) {
           await handleServerSuccess(write, res);
           if (write.id !== undefined) await removePendingWrite(write.id);
           drained++;
+        } else if (res.status === 412 && write.op !== "delete") {
+          // Concurrent edit detected (our last-known updatedAt doesn't
+          // match the server's). Last-writer-wins: retry the write
+          // without If-Match so our local version overwrites the remote.
+          // Fire a user-visible conflict event so the UI can surface a
+          // toast / dialog — the write still goes through, we just let
+          // the user know their edit stomped on someone else's.
+          notifyConflict(write, res);
+          const retry = await sendWrite(fetch, write, { force: true });
+          if (retry.ok) {
+            await handleServerSuccess(write, retry);
+            if (write.id !== undefined) await removePendingWrite(write.id);
+            drained++;
+          } else if (retry.status >= 400 && retry.status < 500) {
+            if (write.id !== undefined) await removePendingWrite(write.id);
+            drained++;
+          } else {
+            await markAttempt(write, `HTTP ${retry.status} after 412 retry`);
+          }
         } else if (res.status >= 400 && res.status < 500) {
-          // last-writer-wins: server said no, but we already made the
-          // local change stick. Drop the queue entry to avoid an infinite
-          // retry loop and surface the local state as authoritative.
+          // 4xx other than 412: the resource is gone or the server
+          // rejected our payload. Drop to avoid a retry loop.
           if (write.id !== undefined) await removePendingWrite(write.id);
           drained++;
         } else {
@@ -84,6 +97,36 @@ export async function syncPendingWrites(): Promise<{ drained: number; remaining:
 
   const remaining = (await getPendingWrites()).length;
   return { drained, remaining };
+}
+
+async function sendWrite(
+  fetch: typeof window.fetch,
+  write: PendingWrite,
+  opts: { force?: boolean } = {}
+): Promise<Response> {
+  const headers: Record<string, string> = { "content-type": "application/json" };
+  // If-Match carries the updatedAt the client last saw — the server
+  // responds 412 if someone else has touched the row since.
+  if (write.ifMatch && !opts.force) headers["if-match"] = write.ifMatch;
+  return fetch(write.path, {
+    method: write.method,
+    headers,
+    body: write.body ? JSON.stringify(write.body) : undefined,
+    credentials: "include",
+  });
+}
+
+function notifyConflict(write: PendingWrite, _res: Response): void {
+  if (typeof window === "undefined") return;
+  window.dispatchEvent(
+    new CustomEvent("fc:conflict", {
+      detail: {
+        op: write.op,
+        eventId: write.eventId,
+        path: write.path,
+      },
+    })
+  );
 }
 
 async function handleServerSuccess(write: PendingWrite, res: Response): Promise<void> {
