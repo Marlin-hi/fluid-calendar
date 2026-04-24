@@ -265,8 +265,11 @@ export function MobileTimeline({ currentDate, onDateChange }: MobileTimelineProp
   };
 
   const yToHour = (clientY: number, columnTop: number): number => {
-    const scrollTop = scrollContainerRef.current?.scrollTop ?? 0;
-    return (clientY - columnTop + scrollTop) / HOUR_HEIGHT;
+    // getBoundingClientRect().top already reflects the current scrollTop
+    // (it's viewport-relative after scroll). Adding scrollTop again was a
+    // long-standing bug in this canvas — it dropped the caller ~8h too low
+    // at the app's default scroll position ((now.getHours() - 2) * 48px).
+    return (clientY - columnTop) / HOUR_HEIGHT;
   };
 
   const handleColumnTouchStart = (day: Date, dayIndex: number) => (e: React.TouchEvent<HTMLDivElement>) => {
@@ -640,7 +643,16 @@ export function MobileTimeline({ currentDate, onDateChange }: MobileTimelineProp
         ref={scrollContainerRef}
         className="flex-1 overflow-scroll overscroll-none"
         onScroll={handleScroll}
-        style={{ scrollbarWidth: "none", WebkitOverflowScrolling: "touch" }}
+        style={{
+          scrollbarWidth: "none",
+          WebkitOverflowScrolling: "touch",
+          // Freeze every axis of the scroller while a ghost block is being
+          // dragged. Without this the horizontal swipe-between-days or a
+          // stray vertical scroll can hijack the finger and the ghost gets
+          // lost. preventDefault on touchmove also helps but only works
+          // reliably once touch-action has been switched off first.
+          touchAction: preview?.armed ? "none" : undefined,
+        }}
       >
         <div className="relative flex" style={{ width: totalWidth, height: gridHeight }}>
           {/* Time axis */}
