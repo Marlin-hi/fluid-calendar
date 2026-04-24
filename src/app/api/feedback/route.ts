@@ -10,14 +10,16 @@ const LOG_SOURCE = "feedback-route";
 /**
  * In-app feedback sink.
  *
- * Users (well, Marlin) send a short free-form text. We append a line to
- * /opt/fluid-calendar-*/data/feedback.jsonl on the server and also log a
- * FEEDBACK marker so it's grep-able in journalctl. No schema migration,
- * no DB table — the whole point is to capture ideas quickly without
- * tipping the app into "now we need to design a backlog UI" territory.
+ * Users (well, Marlin) send a short free-form text. We append a line
+ * to data/feedback.jsonl (relative to the service working directory,
+ * i.e. /opt/fluid-calendar-{dev,staging,prod}/data/feedback.jsonl on
+ * the Werkbank) and log a FEEDBACK-tagged line so it's grep-able in
+ * journalctl. No schema migration, no DB table — the whole point is
+ * to capture ideas quickly without tipping the app into "now we need
+ * to design a backlog UI" territory.
  *
- * Retrieval: `cat /opt/fluid-calendar-dev/data/feedback.jsonl` over SSH,
- * or `journalctl -u fluid-calendar-dev | grep FEEDBACK`.
+ * Retrieval: cat the jsonl file over SSH, or
+ * `journalctl -u fluid-calendar-dev | grep FEEDBACK`.
  */
 export async function POST(request: NextRequest) {
   const auth = await authenticateRequest(request, LOG_SOURCE);
