@@ -33,7 +33,7 @@ import path from "path";
 
 import { prisma } from "@/lib/prisma";
 
-import type { EventRow, EventStore, ListFilter } from "./types";
+import type { EventRow, EventStore } from "./types";
 
 // --- paths ---
 

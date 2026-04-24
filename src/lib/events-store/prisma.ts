@@ -7,7 +7,7 @@
 
 import { prisma } from "@/lib/prisma";
 
-import type { EventRow, EventStore, ListFilter } from "./types";
+import type { EventRow, EventStore } from "./types";
 
 type PrismaRow = Awaited<ReturnType<typeof prisma.calendarEvent.findMany>>[number] & {
   feed?: { name: string | null; color: string | null } | null;
