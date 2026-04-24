@@ -313,47 +313,33 @@ export function installOfflineFetchPatch(): void {
       }
     }
 
-    // --- Writes on any event endpoint: hydrate IDB + queue for later sync ---
+    // --- Writes on any event endpoint: always optimistic ---
+    //
+    // Marlin reported that deletes (and to a lesser degree patches)
+    // hung the UI while online because the calendar store awaited
+    //   1. the write round-trip,
+    //   2. a full loadFromDatabase() GET,
+    //   3. a task schedule-all POST,
+    // all serialised. On a 1-second RTT that's 3 s of spinner.
+    //
+    // We already have a full offline-write pipeline: optimistic IDB
+    // update, pending-writes queue, sync worker that drains
+    // immediately when online. So just route EVERY write through that
+    // pipeline — the sync worker kicks off on the fc:pending-changed
+    // event we emit inside handleOfflineWrite, which fires
+    // sub-millisecond after the user's action. The user sees UI react
+    // instantly; the real server call happens in the background and
+    // reconciles IDB when it succeeds. If-Match conflict detection
+    // still runs on the sync-worker pass and the 412 retry keeps the
+    // last-writer-wins semantics we had before.
     const writePath = isEventWrite(url);
     if (writePath && (method === "POST" || method === "PATCH" || method === "DELETE")) {
       const body = await readJsonBody(init);
-      // Fast-path: if the browser reports offline, skip the real fetch
-      // entirely. Otherwise the browser spends ~30s on its own connect
-      // timeout before our catch-branch fires, which shows up to the
-      // user as a long spinner on the Create button.
-      if (typeof navigator !== "undefined" && navigator.onLine === false) {
-        const offlineRes = await handleOfflineWrite(method, body, writePath);
-        if (offlineRes) return offlineRes;
-        // Unrecognised body — nothing we can cache. Fall through to the
-        // real fetch and let it fail as normal.
-      }
-      try {
-        // Try the real network first — if we're actually online the cloud
-        // wins and the server response is authoritative.
-        const res = await original(...args);
-        if (res.ok) {
-          // Mirror the new/changed/deleted row into IDB so the next GET
-          // (which we might serve from cache) stays consistent.
-          const clone = res.clone();
-          clone.json().then(
-            (data) => {
-              if (method === "DELETE" && body?.id) {
-                deleteEvent(String(body.id)).catch(() => {});
-              } else if (data && typeof data === "object" && "id" in data) {
-                upsertEvent(data as { id: string }).catch(() => {});
-              }
-            },
-            () => {}
-          );
-          return res;
-        }
-        return res;
-      } catch (networkErr) {
-        // Fetch failed → fall back to the offline-write path.
-        const fallback = await handleOfflineWrite(method, body, writePath);
-        if (fallback) return fallback;
-        throw networkErr;
-      }
+      const optimistic = await handleOfflineWrite(method, body, writePath);
+      if (optimistic) return optimistic;
+      // Body wasn't parseable — nothing we can optimistically apply;
+      // fall through to the real fetch so the error is surfaced.
+      return original(...args);
     }
 
     // --- GET /api/events and /api/feeds: hydrate + read-fallback ---
