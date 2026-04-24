@@ -35,6 +35,13 @@ const staticFileExtensions = [
   ".webmanifest",
 ];
 
+// Public-root resources that the browser fetches itself before any user
+// session exists. Critically includes /sw.js and /manifest.json — the
+// browser refuses to register a service worker whose script response was
+// redirected to a login page, so the middleware must let these through
+// even for anonymous visitors.
+const publicAssets = ["/sw.js", "/manifest.json"];
+
 /**
  * Middleware for handling authentication and authorization
  */
@@ -46,6 +53,10 @@ export async function middleware(request: NextRequest) {
     pathname.toLowerCase().endsWith(ext)
   );
   if (hasStaticExtension) {
+    return NextResponse.next();
+  }
+
+  if (publicAssets.includes(pathname)) {
     return NextResponse.next();
   }
 
