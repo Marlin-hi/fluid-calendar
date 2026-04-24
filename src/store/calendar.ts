@@ -154,9 +154,37 @@ export const useCalendarStore = create<CalendarStore>()((set, get) => ({
   ) => {
     const { events } = get();
     const expandedEvents: CalendarEvent[] = [];
-    // console.log("Total events in store:", events.length);
+
+    // Dedup recurring masters. Historical data (CalDAV/Google/Outlook
+    // syncs from older FluidCalendar versions) sometimes stored one row
+    // per occurrence but kept the same `recurrenceRule` on every row.
+    // When getExpandedEvents then expands each of those rows via rrule,
+    // one event ends up rendered hundreds of times. Pick only the
+    // earliest row per (feedId + title + rrule) and drop the rest.
+    const seenMasterKey = new Set<string>();
+    const dedupedRecurringIds = new Set<string>();
+    const recurringMasters = events
+      .filter((e) => e.isRecurring && e.recurrenceRule && !e.masterEventId)
+      .slice()
+      .sort((a, b) => new Date(a.start).getTime() - new Date(b.start).getTime());
+    for (const e of recurringMasters) {
+      const key = `${e.feedId}|${e.title}|${e.recurrenceRule}`;
+      if (seenMasterKey.has(key)) continue;
+      seenMasterKey.add(key);
+      dedupedRecurringIds.add(e.id);
+    }
 
     events.forEach((event) => {
+      // Duplicate recurring master from the historical data import —
+      // skip silently so it doesn't get re-expanded to the same weeks.
+      if (
+        event.isRecurring &&
+        event.recurrenceRule &&
+        !event.masterEventId &&
+        !dedupedRecurringIds.has(event.id)
+      ) {
+        return;
+      }
       // Convert event dates to Date objects if they're not already
       let eventStart =
         event.start instanceof Date ? event.start : newDate(event.start);
