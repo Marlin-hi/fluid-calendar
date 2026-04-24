@@ -287,6 +287,32 @@ export function installOfflineFetchPatch(): void {
     const url = urlOf(input);
     const method = methodOf(input, init);
 
+    // --- Task auto-schedule: swallow offline; the server will schedule on
+    //     its own the next time we're online. Blocking the user's Create
+    //     dialog on a network round-trip to /api/tasks/schedule-all is
+    //     what made offline creates surface "Failed to fetch" alerts even
+    //     though the event itself had landed in IDB correctly. ---
+    if (method === "POST") {
+      try {
+        const u = new URL(url, typeof location === "undefined" ? "http://x" : location.origin);
+        if (
+          u.pathname === "/api/tasks/schedule-all" ||
+          u.pathname === "/api/tasks/schedule-all/queue"
+        ) {
+          if (typeof navigator !== "undefined" && navigator.onLine === false) {
+            return jsonResponse([], 200);
+          }
+          try {
+            return await original(...args);
+          } catch {
+            return jsonResponse([], 200);
+          }
+        }
+      } catch {
+        /* URL parse failed — leave to default handling */
+      }
+    }
+
     // --- Writes on any event endpoint: hydrate IDB + queue for later sync ---
     const writePath = isEventWrite(url);
     if (writePath && (method === "POST" || method === "PATCH" || method === "DELETE")) {

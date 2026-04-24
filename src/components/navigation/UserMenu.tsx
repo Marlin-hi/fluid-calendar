@@ -21,22 +21,18 @@ import {
 export function UserMenu() {
   const { data: session, status } = useSession();
   const [isLoggingOut, setIsLoggingOut] = useState(false);
-  console.log("status-------", status);
 
   // Show a loading state or nothing while session is loading
   if (status === "loading") {
     return null; // Return nothing during loading to prevent flash of sign-in button
   }
 
-  // Check both session status and session data to handle all authentication scenarios
+  // Marlin's self-hosted instance has effectively one user; a "Sign In"
+  // button in the nav just adds noise. Unauthenticated users are caught
+  // at the middleware level and routed to /auth/signin anyway, so we
+  // don't need to offer a second entry point in the top bar.
   if (status !== "authenticated" || !session) {
-    return (
-      <Link href="/auth/signin">
-        <Button variant="outline" size="sm">
-          Sign In
-        </Button>
-      </Link>
-    );
+    return null;
   }
 
   const handleLogout = async () => {
