@@ -838,8 +838,12 @@ export function MobileTimeline({ currentDate, onDateChange }: MobileTimelineProp
                 ))}
 
                 {isToday(day) && (
+                  // z-50 sits above event tiles (z-10..z-20) and the ghost
+                  // preview (z-20) so the current-time line always reads on
+                  // top — previously at z-5 it was hidden behind any event
+                  // tile crossing the current minute.
                   <div
-                    className="absolute left-0 right-0 z-[5] border-t-2 border-red-500"
+                    className="pointer-events-none absolute left-0 right-0 z-50 border-t-2 border-red-500"
                     style={{ top: (new Date().getHours() + new Date().getMinutes() / 60) * HOUR_HEIGHT }}
                   >
                     <div className="absolute -left-1 -top-1.5 h-3 w-3 rounded-full bg-red-500" />

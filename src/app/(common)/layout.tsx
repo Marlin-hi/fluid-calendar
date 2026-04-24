@@ -5,6 +5,7 @@ import { useEffect, useState } from "react";
 import dynamic from "next/dynamic";
 
 import { DndProvider } from "@/components/dnd/DndProvider";
+import { FeedbackButton } from "@/components/feedback/FeedbackButton";
 import { AppNav } from "@/components/navigation/AppNav";
 import { OfflineProvider } from "@/components/providers/OfflineProvider";
 import { PrivacyProvider } from "@/components/providers/PrivacyProvider";
@@ -90,6 +91,7 @@ export default function RootLayout({
             <main className="relative flex-1">
               <NotificationProvider>{children}</NotificationProvider>
             </main>
+            <FeedbackButton />
             <Toaster />
           </DndProvider>
         </PrivacyProvider>
