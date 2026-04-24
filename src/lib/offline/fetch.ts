@@ -89,6 +89,85 @@ function tempId(): string {
   return `local-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
 }
 
+/**
+ * Record a write locally (IDB + queue) and return a synthesized success
+ * Response. Returns null if the body couldn't be interpreted, which lets
+ * the caller rethrow the network error rather than silently eat it.
+ *
+ * Emits `fc:pending-changed` so any open UI (the settings status panel,
+ * a future 'n pending' badge) picks up the new queue length.
+ */
+async function handleOfflineWrite(
+  method: string,
+  body: Record<string, unknown> | null
+): Promise<Response | null> {
+  if (method === "POST" && body) {
+    const id = tempId();
+    const feedId = String(body.feedId ?? "");
+    const feedMeta = await getCachedFeedMeta(feedId);
+    const optimistic = {
+      id,
+      feedId,
+      title: body.title ?? "",
+      description: body.description ?? null,
+      start: body.start,
+      end: body.end,
+      location: body.location ?? null,
+      isRecurring: body.isRecurring ?? false,
+      recurrenceRule: body.recurrenceRule ?? null,
+      allDay: body.allDay ?? false,
+      feed: { name: feedMeta.name ?? null, color: feedMeta.color ?? null },
+      _pending: true as const,
+    };
+    await upsertEvent(optimistic);
+    await queueWrite({
+      op: "create",
+      path: "/api/events",
+      method: "POST",
+      body,
+      eventId: id,
+    });
+    if (typeof window !== "undefined") {
+      window.dispatchEvent(new CustomEvent("fc:pending-changed"));
+    }
+    return jsonResponse(optimistic, 201);
+  }
+  if (method === "PATCH" && body?.id) {
+    const id = String(body.id);
+    const all = await getAllEvents<{ id: string }>();
+    const existing = all.find((e) => e.id === id) ?? { id };
+    const merged = { ...existing, ...body, _pending: true as const };
+    await upsertEvent(merged);
+    await queueWrite({
+      op: "update",
+      path: "/api/events",
+      method: "PATCH",
+      body,
+      eventId: id,
+    });
+    if (typeof window !== "undefined") {
+      window.dispatchEvent(new CustomEvent("fc:pending-changed"));
+    }
+    return jsonResponse(merged, 200);
+  }
+  if (method === "DELETE" && body?.id) {
+    const id = String(body.id);
+    await deleteEvent(id);
+    await queueWrite({
+      op: "delete",
+      path: "/api/events",
+      method: "DELETE",
+      body,
+      eventId: id,
+    });
+    if (typeof window !== "undefined") {
+      window.dispatchEvent(new CustomEvent("fc:pending-changed"));
+    }
+    return jsonResponse({ success: true }, 200);
+  }
+  return null;
+}
+
 async function readJsonBody(init?: FetchArgs[1]): Promise<Record<string, unknown> | null> {
   if (!init?.body) return null;
   try {
@@ -156,6 +235,13 @@ export function installOfflineFetchPatch(): void {
     // --- Writes on /api/events: hydrate IDB + queue for later sync ---
     if (isEventsList(url) && (method === "POST" || method === "PATCH" || method === "DELETE")) {
       const body = await readJsonBody(init);
+      // Fast-path: if the browser reports offline, skip the real fetch
+      // entirely. Otherwise the browser spends ~30s on its own connect
+      // timeout before our catch-branch fires, which shows up to the
+      // user as a long spinner on the Create button.
+      if (typeof navigator !== "undefined" && navigator.onLine === false) {
+        return handleOfflineWrite(method, body);
+      }
       try {
         // Try the real network first — if we're actually online the cloud
         // wins and the server response is authoritative.
@@ -178,78 +264,25 @@ export function installOfflineFetchPatch(): void {
         }
         return res;
       } catch (networkErr) {
-        // Offline. Record the change locally and queue for sync.
-        if (method === "POST" && body) {
-          const id = tempId();
-          const feedId = String(body.feedId ?? "");
-          const feedMeta = await getCachedFeedMeta(feedId);
-          const optimistic = {
-            id,
-            feedId,
-            title: body.title ?? "",
-            description: body.description ?? null,
-            start: body.start,
-            end: body.end,
-            location: body.location ?? null,
-            isRecurring: body.isRecurring ?? false,
-            recurrenceRule: body.recurrenceRule ?? null,
-            allDay: body.allDay ?? false,
-            feed: { name: feedMeta.name ?? null, color: feedMeta.color ?? null },
-            _pending: true as const,
-          };
-          await upsertEvent(optimistic);
-          await queueWrite({
-            op: "create",
-            path: "/api/events",
-            method: "POST",
-            body,
-            eventId: id,
-          });
-          if (typeof window !== "undefined") {
-            window.dispatchEvent(new CustomEvent("fc:pending-changed"));
-          }
-          return jsonResponse(optimistic, 201);
-        }
-        if (method === "PATCH" && body?.id) {
-          const id = String(body.id);
-          const all = await getAllEvents<{ id: string }>();
-          const existing = all.find((e) => e.id === id) ?? { id };
-          const merged = { ...existing, ...body, _pending: true as const };
-          await upsertEvent(merged);
-          await queueWrite({
-            op: "update",
-            path: "/api/events",
-            method: "PATCH",
-            body,
-            eventId: id,
-          });
-          if (typeof window !== "undefined") {
-            window.dispatchEvent(new CustomEvent("fc:pending-changed"));
-          }
-          return jsonResponse(merged, 200);
-        }
-        if (method === "DELETE" && body?.id) {
-          const id = String(body.id);
-          await deleteEvent(id);
-          await queueWrite({
-            op: "delete",
-            path: "/api/events",
-            method: "DELETE",
-            body,
-            eventId: id,
-          });
-          if (typeof window !== "undefined") {
-            window.dispatchEvent(new CustomEvent("fc:pending-changed"));
-          }
-          return jsonResponse({ success: true }, 200);
-        }
-        // Unrecognised write body — surface the network error.
+        // Fetch failed → fall back to the offline-write path.
+        const fallback = await handleOfflineWrite(method, body);
+        if (fallback) return fallback;
         throw networkErr;
       }
     }
 
     // --- GET /api/events and /api/feeds: hydrate + read-fallback ---
     if (method === "GET" && (isEventsList(url) || isFeedsList(url))) {
+      // Fast-path: same reason as the write branch. Skip the browser's
+      // ~30s connect timeout when we already know we're offline.
+      if (typeof navigator !== "undefined" && navigator.onLine === false) {
+        try {
+          if (isEventsList(url)) return jsonResponse(await getCachedEvents());
+          if (isFeedsList(url)) return jsonResponse(await getCachedFeeds());
+        } catch {
+          /* fall through to the normal fetch + catch */
+        }
+      }
       try {
         const res = await original(...args);
         if (!res.ok) return res;

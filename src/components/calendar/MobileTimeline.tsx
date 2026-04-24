@@ -160,7 +160,7 @@ function assignLanes(events: PositionedEvent[]): void {
 }
 
 export function MobileTimeline({ currentDate, onDateChange }: MobileTimelineProps) {
-  const { feeds, getAllCalendarItems } = useCalendarStore();
+  const { feeds, events, getAllCalendarItems } = useCalendarStore();
   const scrollContainerRef = useRef<HTMLDivElement>(null);
   const headerRef = useRef<HTMLDivElement>(null);
   const allDayRef = useRef<HTMLDivElement>(null);
@@ -444,8 +444,13 @@ export function MobileTimeline({ currentDate, onDateChange }: MobileTimelineProp
   const rangeEnd = addDaysUtil(days[days.length - 1], 1);
   const allItems = useMemo(
     () => getAllCalendarItems(rangeStart, rangeEnd),
+    // getAllCalendarItems is a stable store method that reads state.events
+    // via closure. Without listing `events` here as a dependency, Zustand
+    // updates to state.events wouldn't re-run the memo and the freshly
+    // created offline event would stay invisible until a reload. Include
+    // tasks too — the same store function joins them in.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [getAllCalendarItems, rangeStart.getTime(), rangeEnd.getTime()]
+    [getAllCalendarItems, rangeStart.getTime(), rangeEnd.getTime(), events]
   );
 
   const eventsByDay = useMemo(() => {
@@ -810,7 +815,7 @@ export function MobileTimeline({ currentDate, onDateChange }: MobileTimelineProp
                     // left/width come from assignLanes(); the fixed 2px inset
                     // on each side keeps events from touching the column
                     // borders even when they span the full lane.
-                    className="absolute overflow-hidden rounded-lg px-1 py-0.5 text-[10px] leading-tight text-white cursor-pointer"
+                    className="absolute select-none overflow-hidden rounded-lg px-1 py-0.5 text-[10px] leading-tight text-white cursor-pointer"
                     style={{
                       top: pe.top,
                       height: pe.height,
@@ -819,6 +824,13 @@ export function MobileTimeline({ currentDate, onDateChange }: MobileTimelineProp
                       zIndex: pe.zIndex,
                       backgroundColor: hexToGlass(pe.color, 0.55),
                       backdropFilter: "blur(8px)",
+                      // Long-press on text triggers Chrome's native
+                      // "Copy / Share / Select all" popup which hijacks
+                      // the gesture before our ghost armer fires. Disable
+                      // both the selection and the callout so the tile is
+                      // a pure touch target.
+                      WebkitUserSelect: "none",
+                      WebkitTouchCallout: "none",
                     }}
                   >
                     <div className="font-medium truncate">{pe.event.title}</div>
