@@ -34,7 +34,6 @@ import {
   getAllEvents,
   isIdbAvailable,
   putEvents,
-  STORE_EVENTS,
 } from "./db";
 import { isOfflineEnabled } from "./settings";
 
@@ -163,5 +162,3 @@ export function installOfflineFetchPatch(): void {
   }) as typeof fetch;
 }
 
-/** Debug helper, unused in production. */
-export { STORE_EVENTS };

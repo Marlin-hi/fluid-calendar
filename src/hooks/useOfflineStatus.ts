@@ -2,10 +2,7 @@
 
 import { useEffect, useState } from "react";
 
-import {
-  countPending,
-  type PendingWrite,
-} from "@/lib/offline/db";
+import { countPending } from "@/lib/offline/db";
 import {
   isOfflineEnabled,
   subscribeOfflineEnabled,
@@ -71,7 +68,7 @@ export function useOfflineStatus() {
 }
 
 /** Helper: fire from the write-proxy after every queue enqueue/drain. */
-export function emitPendingChanged(_reason?: PendingWrite["op"]): void {
+export function emitPendingChanged(): void {
   if (typeof window === "undefined") return;
   window.dispatchEvent(new CustomEvent("fc:pending-changed"));
 }
