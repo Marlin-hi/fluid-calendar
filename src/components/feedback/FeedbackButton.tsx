@@ -60,7 +60,7 @@ export function FeedbackButton() {
         >
           <div
             onClick={(e) => e.stopPropagation()}
-            className="w-full rounded-t-lg border border-border bg-background p-4 md:max-w-md md:rounded-lg"
+            className="w-full rounded-t-lg border border-border bg-background/85 backdrop-blur-xl shadow-xl p-4 md:max-w-md md:rounded-lg"
           >
             <div className="mb-2 flex items-center justify-between">
               <h3 className="text-base font-semibold">Was nervt, was fehlt?</h3>

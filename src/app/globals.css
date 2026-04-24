@@ -373,6 +373,12 @@
   * {
     @apply border-border;
   }
+  html,
+  body {
+    /* Kill mobile rubber-band / URL-bar collapse that made the top row
+       jiggle when Marlin swiped above the canvas. Safe on desktop. */
+    overscroll-behavior: none;
+  }
   body {
     @apply bg-background text-foreground;
   }

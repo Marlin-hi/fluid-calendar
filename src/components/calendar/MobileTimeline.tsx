@@ -415,6 +415,27 @@ export function MobileTimeline({ currentDate, onDateChange }: MobileTimelineProp
     return () => container.removeEventListener("touchmove", onMove);
   }, []);
 
+  // Hard-freeze scrollTop the instant `armed` flips. Even with the
+  // preventDefault listener above, if the user has enough momentum in
+  // flight when the 400ms timer fires, the scroller keeps gliding for
+  // a handful of frames — that's the "weird state" Marlin reported
+  // where the ghost is visible but the canvas is still drifting. We
+  // pin scrollTop via rAF until the gesture ends.
+  useEffect(() => {
+    const container = scrollContainerRef.current;
+    if (!container) return;
+    if (!preview?.armed) return;
+    const frozen = container.scrollTop;
+    let raf = 0;
+    const tick = () => {
+      if (!previewArmedRef.current) return;
+      if (container.scrollTop !== frozen) container.scrollTop = frozen;
+      raf = requestAnimationFrame(tick);
+    };
+    raf = requestAnimationFrame(tick);
+    return () => cancelAnimationFrame(raf);
+  }, [preview?.armed]);
+
   const handleEventModalClose = useCallback(() => {
     setIsEventModalOpen(false);
     setSelectedEvent(undefined);
@@ -662,11 +683,11 @@ export function MobileTimeline({ currentDate, onDateChange }: MobileTimelineProp
   const gridHeight = VISIBLE_HOURS * HOUR_HEIGHT;
 
   return (
-    <div className="flex h-full flex-col overflow-hidden">
+    <div className="flex h-full flex-col overflow-hidden" style={{ touchAction: "pan-x pan-y" }}>
       {/* Header */}
-      <div className="flex border-b border-border">
+      <div className="flex border-b border-border" style={{ touchAction: "pan-x" }}>
         <div className="w-12 flex-none" />
-        <div ref={headerRef} className="flex-1 overflow-hidden" style={{ scrollbarWidth: "none" }}>
+        <div ref={headerRef} className="flex-1 overflow-hidden" style={{ scrollbarWidth: "none", touchAction: "pan-x" }}>
           <div className="flex" style={{ width: daysWidth }}>
             {days.map((day) => (
               <div
@@ -685,7 +706,7 @@ export function MobileTimeline({ currentDate, onDateChange }: MobileTimelineProp
 
       {/* All-day row */}
       {allDayHeight > 0 && (
-        <div className="flex border-b border-border" style={{ height: allDayHeight }}>
+        <div className="flex border-b border-border" style={{ height: allDayHeight, touchAction: "pan-x" }}>
           <div className="w-12 flex-none text-[10px] text-muted-foreground px-1 py-0.5">ganzt.</div>
           <div ref={allDayRef} className="relative flex-1 overflow-hidden" style={{ scrollbarWidth: "none" }}>
             <div className="relative" style={{ width: daysWidth, height: allDayHeight }}>
