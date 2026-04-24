@@ -338,6 +338,26 @@ export function MobileTimeline({ currentDate, onDateChange }: MobileTimelineProp
     setPreview(null);
   };
 
+  // Scroll-freeze while the ghost is being dragged.
+  //
+  // CSS `touch-action: none` only applies to NEW touch sequences — once a
+  // touch has already started and the browser has decided "this is a
+  // scroll", flipping touch-action mid-gesture does nothing. So we also
+  // register a native, non-passive touchmove listener on the scroller and
+  // call preventDefault() while the ghost is armed. React's synthetic
+  // handlers are passive by default; only a native listener can cancel
+  // scroll mid-touch.
+  const previewArmed = preview?.armed === true;
+  useEffect(() => {
+    const container = scrollContainerRef.current;
+    if (!container) return;
+    const onMove = (e: TouchEvent) => {
+      if (previewArmed) e.preventDefault();
+    };
+    container.addEventListener("touchmove", onMove, { passive: false });
+    return () => container.removeEventListener("touchmove", onMove);
+  }, [previewArmed]);
+
   const handleEventModalClose = useCallback(() => {
     setIsEventModalOpen(false);
     setSelectedEvent(undefined);
@@ -715,8 +735,13 @@ export function MobileTimeline({ currentDate, onDateChange }: MobileTimelineProp
                   >
                     <div className="font-medium">Block</div>
                     <div className="text-[9px] opacity-80">
-                      {formatHour(Math.floor(preview.currentHour))}
-                      {preview.currentHour % 1 !== 0 ? `:${Math.round((preview.currentHour % 1) * 60).toString().padStart(2, "0")}` : ""}
+                      {(() => {
+                        // formatHour(9) returns "09:00" already — appending a
+                        // minute value produced "09:00:15" instead of "09:15".
+                        const h = Math.floor(preview.currentHour).toString().padStart(2, "0");
+                        const m = Math.round((preview.currentHour % 1) * 60).toString().padStart(2, "0");
+                        return `${h}:${m}`;
+                      })()}
                     </div>
                   </div>
                 )}
