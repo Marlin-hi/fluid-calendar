@@ -407,7 +407,10 @@ export function EventModal({
               </Select>
             </div>
 
-            <div className="grid grid-cols-2 gap-4">
+            {/* Stack Start/End on narrow viewports: the German datetime-local
+                format (DD.MM.YYYY, HH:MM) doesn't fit in two side-by-side
+                inputs on a ~380px mobile width and the time gets clipped. */}
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
               <div className="space-y-2">
                 <Label htmlFor="start">Start</Label>
                 <Input
