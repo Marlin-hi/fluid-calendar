@@ -258,25 +258,24 @@ export function Calendar({
               Today
             </button>
 
+            {/* Auto-Schedule: only on md+; mobile has the Offline pill and
+             *  prev/next nav fighting for the same space. Reachable via
+             *  Settings or from the Task view anyway. */}
             <button
               onClick={handleAutoSchedule}
-              className="flex flex-shrink-0 items-center gap-1 rounded-lg px-2 py-1 text-xs font-medium text-primary hover:bg-primary/10 md:px-3 md:py-1.5 md:text-sm"
+              className="hidden flex-shrink-0 items-center gap-1 rounded-lg px-3 py-1.5 text-sm font-medium text-primary hover:bg-primary/10 md:flex"
               title="Auto Schedule"
             >
               <HiLightningBolt className="h-4 w-4" />
-              <span className="hidden md:inline">Auto Schedule</span>
+              <span>Auto Schedule</span>
             </button>
 
-            {/* Offline status pill: shows only when the feature flag is on.
-             *  Colour-codes the two useful signals — offline-without-pending
-             *  (amber), offline-with-pending (amber + count), online-with-
-             *  pending-draining (blue + count). When online and nothing is
-             *  queued the pill stays hidden to keep the header quiet. */}
+            {/* Offline status pill. Mobile = dot only; desktop adds label. */}
             {offlineEnabled && (online === false || pendingCount > 0) && (
               <a
                 href="/settings#offline"
                 className={cn(
-                  "flex flex-shrink-0 items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-semibold md:text-xs",
+                  "flex flex-shrink-0 items-center justify-center gap-1 rounded-full px-1.5 py-0.5 text-[10px] font-semibold md:px-2 md:text-xs",
                   online
                     ? "bg-blue-500/15 text-blue-500"
                     : "bg-amber-500/15 text-amber-600"
@@ -293,9 +292,9 @@ export function Calendar({
                     online ? "bg-blue-500" : "bg-amber-500"
                   )}
                 />
-                {online ? "Sync" : "Offline"}
+                <span className="hidden md:inline">{online ? "Sync" : "Offline"}</span>
                 {pendingCount > 0 && (
-                  <span className="tabular-nums">· {pendingCount}</span>
+                  <span className="tabular-nums">{pendingCount}</span>
                 )}
               </a>
             )}
