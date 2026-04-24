@@ -240,7 +240,10 @@ export function installOfflineFetchPatch(): void {
       // timeout before our catch-branch fires, which shows up to the
       // user as a long spinner on the Create button.
       if (typeof navigator !== "undefined" && navigator.onLine === false) {
-        return handleOfflineWrite(method, body);
+        const offlineRes = await handleOfflineWrite(method, body);
+        if (offlineRes) return offlineRes;
+        // Unrecognised body — nothing we can cache. Fall through to the
+        // real fetch and let it fail as normal.
       }
       try {
         // Try the real network first — if we're actually online the cloud
