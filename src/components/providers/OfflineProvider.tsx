@@ -2,6 +2,7 @@
 
 import { useEffect } from "react";
 
+import { deleteEvent, isIdbAvailable } from "@/lib/offline/db";
 import { installOfflineFetchPatch } from "@/lib/offline/fetch";
 import { startSyncWorker } from "@/lib/offline/syncWorker";
 
@@ -22,6 +23,16 @@ import { startSyncWorker } from "@/lib/offline/syncWorker";
  */
 export function OfflineProvider({ children }: { children: React.ReactNode }) {
   useEffect(() => {
+    // On every fresh tab the first /api/events should be a FULL fetch,
+    // not a delta. Otherwise server-side deletes (or a prod→dev DB
+    // clone like the one we just did) never converge: the client keeps
+    // its old rows because `?since=` returns nothing relevant. Dropping
+    // the cursor here is cheap (one tiny IDB delete) and the full-fetch
+    // path already purges stale rows. Subsequent fetches in the same
+    // tab session go back to using the cursor.
+    if (isIdbAvailable()) {
+      deleteEvent("__fc_sync_cursor__").catch(() => {});
+    }
     installOfflineFetchPatch();
     startSyncWorker();
   }, []);
