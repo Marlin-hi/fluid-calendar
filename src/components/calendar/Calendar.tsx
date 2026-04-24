@@ -183,11 +183,15 @@ export function Calendar({
   };
 
   // Short date format for mobile
+  // Mobile-Header ist eng bestueckt (Hamburger, Today, Blitz, Prev/Next,
+  // Datum, Day/Week/Mon). Langes Datum wie "24. Apr. 2026" bricht auf 360px-
+  // Screens zweizeilig um und verdraengt die Header-Zeile. Kurze "24.04."-
+  // Form reicht — die Navigation gibt genug Kontext fuer den Monat, und
+  // das Jahr steht im Monats-Picker.
   const formatDateShort = (date: Date) => {
     return date.toLocaleDateString("de-DE", {
-      day: "numeric",
-      month: "short",
-      year: "numeric",
+      day: "2-digit",
+      month: "2-digit",
     });
   };
 
@@ -223,7 +227,7 @@ export function Calendar({
       <main className="flex min-w-0 flex-1 flex-col bg-background">
         <LifetimeAccessBanner />
         {/* Header */}
-        <header className="flex h-12 flex-none items-center border-b border-border px-2 md:h-16 md:px-4">
+        <header className="flex h-10 flex-none items-center border-b border-border px-2 md:h-16 md:px-4">
           <button
             onClick={() => setSidebarOpen(!isSidebarOpen)}
             className="rounded-lg p-1.5 text-foreground hover:bg-muted md:p-2"

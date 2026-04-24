@@ -31,9 +31,12 @@
  */
 
 import {
+  deleteEvent,
   getAllEvents,
   isIdbAvailable,
   putEvents,
+  queueWrite,
+  upsertEvent,
 } from "./db";
 import { isOfflineEnabled } from "./settings";
 
@@ -80,6 +83,37 @@ function jsonResponse(body: unknown, status = 200): Response {
   });
 }
 
+/** Pre-synced events get a `local-` id. The sync worker swaps it for the
+ *  real server id once the POST has gone through.  */
+function tempId(): string {
+  return `local-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
+}
+
+async function readJsonBody(init?: FetchArgs[1]): Promise<Record<string, unknown> | null> {
+  if (!init?.body) return null;
+  try {
+    if (typeof init.body === "string") return JSON.parse(init.body) as Record<string, unknown>;
+    // FormData / Blob / ReadableStream are not used for /api/events in FC.
+    return null;
+  } catch {
+    return null;
+  }
+}
+
+/** Pull the cached feed array back out of the events store. Needed so that
+ *  the synthesized event we return from a POST has the feed name/color the
+ *  calendar UI expects to render the tile. */
+async function getCachedFeedMeta(feedId: string): Promise<{ name?: string; color?: string }> {
+  try {
+    const all = await getAllEvents<{ id: string; data?: Array<{ id: string; name?: string; color?: string }> }>();
+    const bundle = all.find((r) => r.id === "__fc_feeds_cache__");
+    const feed = Array.isArray(bundle?.data) ? bundle!.data.find((f) => f.id === feedId) : undefined;
+    return feed ? { name: feed.name, color: feed.color } : {};
+  } catch {
+    return {};
+  }
+}
+
 /** Feeds cache lives in IDB too, under the events store keyed by a sentinel id.
  *  Keeps the code path simple — we don't need a second store for five-ish rows. */
 const FEEDS_CACHE_ID = "__fc_feeds_cache__";
@@ -119,29 +153,139 @@ export function installOfflineFetchPatch(): void {
     const url = urlOf(input);
     const method = methodOf(input, init);
 
-    // Only instrument the two read paths for Phase 1. Phase 2 will add
-    // the write proxy + sync worker here.
-    if (method === "GET" && (isEventsList(url) || isFeedsList(url))) {
+    // --- Writes on /api/events: hydrate IDB + queue for later sync ---
+    if (isEventsList(url) && (method === "POST" || method === "PATCH" || method === "DELETE")) {
+      const body = await readJsonBody(init);
       try {
+        // Try the real network first — if we're actually online the cloud
+        // wins and the server response is authoritative.
         const res = await original(...args);
         if (res.ok) {
-          // Mirror response into IDB for offline replay. We clone because
-          // .json() reads the body stream — the caller still needs it.
+          // Mirror the new/changed/deleted row into IDB so the next GET
+          // (which we might serve from cache) stays consistent.
           const clone = res.clone();
           clone.json().then(
             (data) => {
-              if (isEventsList(url) && Array.isArray(data)) {
-                putEvents(data as Array<{ id: string }>).catch(() => {});
-              } else if (isFeedsList(url)) {
-                cacheFeeds(data).catch(() => {});
+              if (method === "DELETE" && body?.id) {
+                deleteEvent(String(body.id)).catch(() => {});
+              } else if (data && typeof data === "object" && "id" in data) {
+                upsertEvent(data as { id: string }).catch(() => {});
               }
             },
-            () => { /* parse error, ignore */ }
+            () => {}
           );
+          return res;
         }
         return res;
       } catch (networkErr) {
-        // Network failed → serve from IDB.
+        // Offline. Record the change locally and queue for sync.
+        if (method === "POST" && body) {
+          const id = tempId();
+          const feedId = String(body.feedId ?? "");
+          const feedMeta = await getCachedFeedMeta(feedId);
+          const optimistic = {
+            id,
+            feedId,
+            title: body.title ?? "",
+            description: body.description ?? null,
+            start: body.start,
+            end: body.end,
+            location: body.location ?? null,
+            isRecurring: body.isRecurring ?? false,
+            recurrenceRule: body.recurrenceRule ?? null,
+            allDay: body.allDay ?? false,
+            feed: { name: feedMeta.name ?? null, color: feedMeta.color ?? null },
+            _pending: true as const,
+          };
+          await upsertEvent(optimistic);
+          await queueWrite({
+            op: "create",
+            path: "/api/events",
+            method: "POST",
+            body,
+            eventId: id,
+          });
+          if (typeof window !== "undefined") {
+            window.dispatchEvent(new CustomEvent("fc:pending-changed"));
+          }
+          return jsonResponse(optimistic, 201);
+        }
+        if (method === "PATCH" && body?.id) {
+          const id = String(body.id);
+          const all = await getAllEvents<{ id: string }>();
+          const existing = all.find((e) => e.id === id) ?? { id };
+          const merged = { ...existing, ...body, _pending: true as const };
+          await upsertEvent(merged);
+          await queueWrite({
+            op: "update",
+            path: "/api/events",
+            method: "PATCH",
+            body,
+            eventId: id,
+          });
+          if (typeof window !== "undefined") {
+            window.dispatchEvent(new CustomEvent("fc:pending-changed"));
+          }
+          return jsonResponse(merged, 200);
+        }
+        if (method === "DELETE" && body?.id) {
+          const id = String(body.id);
+          await deleteEvent(id);
+          await queueWrite({
+            op: "delete",
+            path: "/api/events",
+            method: "DELETE",
+            body,
+            eventId: id,
+          });
+          if (typeof window !== "undefined") {
+            window.dispatchEvent(new CustomEvent("fc:pending-changed"));
+          }
+          return jsonResponse({ success: true }, 200);
+        }
+        // Unrecognised write body — surface the network error.
+        throw networkErr;
+      }
+    }
+
+    // --- GET /api/events and /api/feeds: hydrate + read-fallback ---
+    if (method === "GET" && (isEventsList(url) || isFeedsList(url))) {
+      try {
+        const res = await original(...args);
+        if (!res.ok) return res;
+
+        if (isEventsList(url)) {
+          // Parse the real response, mirror it into IDB, but merge in any
+          // locally-created events that haven't synced yet so the UI keeps
+          // showing them. After the sync worker drains the queue the next
+          // GET already has the real rows and the `_pending` ones drop out
+          // naturally.
+          const real = (await res.clone().json()) as Array<{ id: string }>;
+          if (Array.isArray(real)) {
+            putEvents(real).catch(() => {});
+            const all = await getCachedEvents();
+            const pending = all.filter(
+              (e) => (e as { _pending?: boolean })._pending === true
+            );
+            if (pending.length > 0) {
+              return jsonResponse([...real, ...pending]);
+            }
+          }
+          return res;
+        }
+
+        if (isFeedsList(url)) {
+          const clone = res.clone();
+          clone.json().then(
+            (data) => cacheFeeds(data).catch(() => {}),
+            () => {}
+          );
+          return res;
+        }
+
+        return res;
+      } catch (networkErr) {
+        // Network failed → serve from IDB. Includes any pending rows.
         try {
           if (isEventsList(url)) {
             const events = await getCachedEvents();
