@@ -72,7 +72,7 @@ export default function RootLayout({
   return (
     <TimeThemeProvider>
     <OfflineProvider>
-    <div className="flex min-h-screen flex-col overflow-x-hidden">
+    <div className="flex min-h-[100svh] flex-col overflow-x-hidden supports-[height:100dvh]:min-h-[100dvh]">
       <SessionProvider>
         <PrivacyProvider>
           <DndProvider>

@@ -389,23 +389,31 @@ export function MobileTimeline({ currentDate, onDateChange }: MobileTimelineProp
 
   // Scroll-freeze while the ghost is being dragged.
   //
-  // CSS `touch-action: none` only applies to NEW touch sequences — once a
-  // touch has already started and the browser has decided "this is a
+  // CSS `touch-action: none` only applies to NEW touch sequences — once
+  // a touch has already started and the browser has decided "this is a
   // scroll", flipping touch-action mid-gesture does nothing. So we also
-  // register a native, non-passive touchmove listener on the scroller and
-  // call preventDefault() while the ghost is armed. React's synthetic
-  // handlers are passive by default; only a native listener can cancel
-  // scroll mid-touch.
-  const previewArmed = preview?.armed === true;
+  // register a native, non-passive touchmove listener on the scroller
+  // that calls preventDefault() while the ghost is armed. React's
+  // synthetic handlers are passive by default; only a native listener
+  // can cancel scroll mid-touch.
+  //
+  // IMPORTANT: the listener reads a ref, not the state. Re-registering
+  // the listener on every `preview.armed` change (via useEffect deps)
+  // leaves a one-frame gap where the old passive branch was in place
+  // but the new preventDefault branch isn't active yet — Marlin felt
+  // that gap as "scroll keeps going for a moment after the ghost
+  // appears". With a ref, the listener is installed once, checks live.
+  const previewArmedRef = useRef(false);
+  previewArmedRef.current = preview?.armed === true;
   useEffect(() => {
     const container = scrollContainerRef.current;
     if (!container) return;
     const onMove = (e: TouchEvent) => {
-      if (previewArmed) e.preventDefault();
+      if (previewArmedRef.current) e.preventDefault();
     };
     container.addEventListener("touchmove", onMove, { passive: false });
     return () => container.removeEventListener("touchmove", onMove);
-  }, [previewArmed]);
+  }, []);
 
   const handleEventModalClose = useCallback(() => {
     setIsEventModalOpen(false);
