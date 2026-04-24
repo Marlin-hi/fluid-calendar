@@ -11,6 +11,7 @@ import { CalendarSettings } from "@/components/settings/CalendarSettings";
 import { ImportExportSettings } from "@/components/settings/ImportExportSettings";
 import { LogViewer } from "@/components/settings/LogViewer";
 import { NotificationSettings } from "@/components/settings/NotificationSettings";
+import { OfflineSettings } from "@/components/settings/OfflineSettings";
 import { SystemSettings } from "@/components/settings/SystemSettings";
 import { TaskSyncSettings } from "@/components/settings/TaskSyncSettings";
 import { UserManagement } from "@/components/settings/UserManagement";
@@ -52,7 +53,8 @@ type SettingsTab =
   | "waitlist"
   | "import-export"
   | "admin-dashboard"
-  | "notifications";
+  | "notifications"
+  | "offline";
 
 export default function SettingsPage() {
   const [isHydrated, setIsHydrated] = useState(false);
@@ -73,6 +75,7 @@ export default function SettingsPage() {
       { id: "task-sync", label: "Task Sync" },
       { id: "notifications", label: "Notifications" },
       { id: "import-export", label: "Import/Export" },
+      { id: "offline", label: "Offline" },
     ] as const;
 
     // Add admin-only tabs
@@ -120,6 +123,7 @@ export default function SettingsPage() {
         "import-export",
         "admin-dashboard",
         "notifications",
+        "offline",
       ];
 
       if (allPossibleTabIds.includes(hash)) {
@@ -199,6 +203,8 @@ export default function SettingsPage() {
         return <UserManagement />;
       case "import-export":
         return <ImportExportSettings />;
+      case "offline":
+        return <OfflineSettings />;
       case "waitlist":
         return (
           <Suspense fallback={<div>Loading...</div>}>

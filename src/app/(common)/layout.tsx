@@ -6,6 +6,7 @@ import dynamic from "next/dynamic";
 
 import { DndProvider } from "@/components/dnd/DndProvider";
 import { AppNav } from "@/components/navigation/AppNav";
+import { OfflineProvider } from "@/components/providers/OfflineProvider";
 import { PrivacyProvider } from "@/components/providers/PrivacyProvider";
 import { SessionProvider } from "@/components/providers/SessionProvider";
 import { SetupCheck } from "@/components/setup/SetupCheck";
@@ -69,6 +70,7 @@ export default function RootLayout({
 
   return (
     <TimeThemeProvider>
+    <OfflineProvider>
     <div className="flex min-h-screen flex-col overflow-x-hidden">
       <SessionProvider>
         <PrivacyProvider>
@@ -93,6 +95,7 @@ export default function RootLayout({
         </PrivacyProvider>
       </SessionProvider>
     </div>
+    </OfflineProvider>
     </TimeThemeProvider>
   );
 }
