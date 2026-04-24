@@ -152,7 +152,7 @@ export function EventModal({
         : newDate(Date.now() + 3600000)
   );
   const [selectedFeedId, setSelectedFeedId] = useState<string>(
-    event?.feedId || calendar.defaultCalendarId || ""
+    event?.feedId || calendar.defaultCalendarId || feeds[0]?.id || ""
   );
   const [isAllDay, setIsAllDay] = useState(event?.allDay || false);
   const [isRecurring, setIsRecurring] = useState(event?.isRecurring || false);
@@ -181,7 +181,7 @@ export function EventModal({
             ? newDate(defaultEndDate)
             : newDate(Date.now() + 3600000)
       );
-      setSelectedFeedId(event?.feedId || calendar.defaultCalendarId || "");
+      setSelectedFeedId(event?.feedId || calendar.defaultCalendarId || feeds[0]?.id || "");
       setIsAllDay(event?.allDay || false);
       setIsRecurring(event?.isRecurring || false);
       const { freq, interval, byDay } = parseRecurrenceRule(
@@ -220,7 +220,12 @@ export function EventModal({
     try {
       const feed = feeds.find((f) => f.id === selectedFeedId);
       if (!feed) {
-        console.error("Selected calendar not found");
+        console.error("Selected calendar not found", { selectedFeedId, feeds });
+        alert(
+          selectedFeedId
+            ? "Selected calendar not found. Please pick one from the dropdown."
+            : "No calendar selected. Pick one from the dropdown before saving."
+        );
         return;
       }
 
