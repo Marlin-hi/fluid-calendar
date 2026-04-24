@@ -65,7 +65,7 @@ export async function syncPendingWrites(): Promise<{ drained: number; remaining:
           // Fire a user-visible conflict event so the UI can surface a
           // toast / dialog — the write still goes through, we just let
           // the user know their edit stomped on someone else's.
-          notifyConflict(write, res);
+          notifyConflict(write);
           const retry = await sendWrite(fetch, write, { force: true });
           if (retry.ok) {
             await handleServerSuccess(write, retry);
@@ -116,7 +116,7 @@ async function sendWrite(
   });
 }
 
-function notifyConflict(write: PendingWrite, _res: Response): void {
+function notifyConflict(write: PendingWrite): void {
   if (typeof window === "undefined") return;
   window.dispatchEvent(
     new CustomEvent("fc:conflict", {
