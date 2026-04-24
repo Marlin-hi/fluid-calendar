@@ -160,6 +160,24 @@ async function markAttempt(write: PendingWrite, errMsg: string): Promise<void> {
   });
 }
 
+/** Register a Background Sync tag so the browser drains the queue even
+ *  after the tab closes. Silently no-ops on browsers that don't support
+ *  the SyncManager (Safari, older Firefox) — the main-thread 30s poll
+ *  and the page's message-driven fallback cover those. */
+async function registerBackgroundSync(): Promise<void> {
+  if (typeof window === "undefined") return;
+  if (!("serviceWorker" in navigator)) return;
+  if (!("SyncManager" in window)) return;
+  try {
+    const reg = await navigator.serviceWorker.ready;
+    // sync is not in the core DOM types yet; cast at the call site.
+    const syncMgr = (reg as unknown as { sync?: { register: (tag: string) => Promise<void> } }).sync;
+    if (syncMgr) await syncMgr.register("fc-sync-pending");
+  } catch {
+    /* user denied / feature off — rely on main-thread worker */
+  }
+}
+
 /** Bootstrap listeners that push drains into the background. Call once
  *  from the OfflineProvider. Idempotent. */
 let listenersInstalled = false;
@@ -170,6 +188,7 @@ export function startSyncWorker(): void {
 
   const trigger = () => {
     void syncPendingWrites();
+    void registerBackgroundSync();
   };
 
   window.addEventListener("online", trigger);
@@ -178,6 +197,16 @@ export function startSyncWorker(): void {
   // Also drain when a new write was just queued, in case we're still
   // online but landed on the queue because of a transient error.
   window.addEventListener("fc:pending-changed", trigger);
+
+  // The SW posts fc:pending-changed via postMessage after its own drain
+  // completes. Forward it onto the same event bus so the UI sees it.
+  if ("serviceWorker" in navigator) {
+    navigator.serviceWorker.addEventListener("message", (e) => {
+      if (e.data?.type === "fc:pending-changed") {
+        window.dispatchEvent(new CustomEvent("fc:pending-changed"));
+      }
+    });
+  }
 
   // First kick: if the queue has stale entries from a previous session,
   // push them through as soon as the tab starts.
