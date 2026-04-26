@@ -4,10 +4,17 @@ import { authenticateRequest } from "@/lib/auth/api-auth";
 import { CalDAVCalendarService } from "@/lib/caldav-calendar";
 import { getEvent, validateEvent } from "@/lib/calendar-db";
 import { newDate } from "@/lib/date-utils";
+import { getBackend, getEventStore } from "@/lib/events-store";
 import { logger } from "@/lib/logger";
 import { prisma } from "@/lib/prisma";
 
 const LOG_SOURCE = "CalDAVEventsAPI";
+
+// In vault mode, this whole route is a thin shim over the EventStore —
+// no CalDAV server is talked to, the event lives as a Markdown file.
+// The client still calls these URLs because the feed is still typed
+// as CALDAV, but for the vault-backed instance that is purely a label.
+const isVault = () => getBackend() === "vault";
 
 // Create a new event
 export async function POST(request: NextRequest) {
@@ -30,6 +37,21 @@ export async function POST(request: NextRequest) {
       },
       LOG_SOURCE
     );
+
+    if (isVault()) {
+      const created = await getEventStore().create(userId, {
+        feedId,
+        title: eventData.title,
+        description: eventData.description ?? null,
+        location: eventData.location ?? null,
+        start: newDate(eventData.start).toISOString(),
+        end: newDate(eventData.end).toISOString(),
+        allDay: !!eventData.allDay,
+        isRecurring: !!eventData.isRecurring,
+        recurrenceRule: eventData.recurrenceRule ?? null,
+      });
+      return NextResponse.json(created);
+    }
 
     // Check if the feed belongs to the current user
     const feed = await prisma.calendarFeed.findUnique({
@@ -148,6 +170,25 @@ export async function PUT(request: NextRequest) {
       LOG_SOURCE
     );
 
+    if (isVault()) {
+      const patch: Record<string, unknown> = {};
+      if ("title" in updates) patch.title = updates.title;
+      if ("description" in updates) patch.description = updates.description ?? null;
+      if ("location" in updates) patch.location = updates.location ?? null;
+      if ("start" in updates) patch.start = newDate(updates.start).toISOString();
+      if ("end" in updates) patch.end = newDate(updates.end).toISOString();
+      if ("allDay" in updates) patch.allDay = !!updates.allDay;
+      if ("isRecurring" in updates) patch.isRecurring = !!updates.isRecurring;
+      if ("recurrenceRule" in updates) patch.recurrenceRule = updates.recurrenceRule ?? null;
+
+      const result = await getEventStore().update(userId, eventId, patch);
+      if (!result.ok) {
+        const status = result.reason === "not-found" ? 404 : 412;
+        return NextResponse.json({ error: result.reason }, { status });
+      }
+      return NextResponse.json(result.row);
+    }
+
     // Get the event from the database
     const event = await getEvent(eventId);
     if (!event) {
@@ -262,6 +303,15 @@ export async function DELETE(request: NextRequest) {
       },
       LOG_SOURCE
     );
+
+    if (isVault()) {
+      const result = await getEventStore().remove(userId, eventId);
+      if (!result.ok) {
+        const status = result.reason === "not-found" ? 404 : 412;
+        return NextResponse.json({ error: result.reason }, { status });
+      }
+      return NextResponse.json({ success: true });
+    }
 
     // Get the event from the database
     const event = await getEvent(eventId);
