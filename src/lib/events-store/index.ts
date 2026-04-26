@@ -8,7 +8,8 @@ import { prismaStore } from "./prisma";
 import { getBackend } from "./types";
 import { vaultStore } from "./vault";
 
-export type { EventRow, EventStore, ListFilter } from "./types";
+export type { CalendarBackend, EventRow, EventStore, ListFilter } from "./types";
+export { getBackend } from "./types";
 
 let cached: ReturnType<typeof resolve> | null = null;
 
